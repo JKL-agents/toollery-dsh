@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.1.2
 
 - Add Windows x64 double-click installation with private Python, Node.js and pnpm; no preconfigured PATH required.
 - Add a local browser setup page for tool pools, retrieval settings, independent model credentials, explicit manual generation and a free scripted preview.
