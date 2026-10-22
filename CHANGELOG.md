@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Add DSH Web UI recordings showing per-turn k changes and the in-conversation OFF switch.
 - Fix a Windows CI assertion for canonicalized short paths and update checkout/setup actions to Node.js 24.
 - Check Node/pnpm versions with bounded probes and actionable terminal/PATH diagnostics.
 - Resolve custom generator and host commands from the configuration directory; handle Windows npm shims consistently.

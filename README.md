@@ -15,6 +15,18 @@ This project implements an existing method, not an original algorithm. It is not
 
 The default is **ON / spec_manual / top_k / k=3**. OFF gives DSH the full original tool pool and bypasses retrieval. `all` retains every tool but can still rank them using the selected representation.
 
+## DSH Web UI demos
+
+**Change k and try a different prompt.** Start with an addition request at k=3, then change k to 5 and ask for a temperature conversion. Each turn shows the retrieved candidates and actual tool calls.
+
+![DSH integration: change k from 3 to 5 and retrieve tools for different prompts](DSH_Toollery_demo.gif)
+
+**Switch OFF during a conversation.** Disable Toollery and repeat the request. The next turn bypasses retrieval and makes all 12 tools available. The k setting is retained but has no effect while Toollery is OFF.
+
+![DSH integration: switch Toollery OFF and restore all 12 tools for the next turn](DSH_Toollery_demo_2.gif)
+
+Both recordings use the bundled 12-tool demo. Settings apply to the next turn; they do not change a turn already in progress.
+
 ## Requirements
 
 - Python 3.12 or later; Python 3.12.7 was tested on Windows.
