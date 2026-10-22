@@ -11,10 +11,11 @@ from pathlib import Path
 import sys
 import time
 
-from .configuration import ASSETS, load_config, generator_config as read_generator, load_key, load_source_credentials
+from .configuration import (ASSETS, load_config, generator_config as read_generator, load_key,
+                            configured_generator, load_generator_credentials, load_source_credentials)
 
 from toollery.adapters.dsh import DSHBridge
-from toollery.generation import MockGenerator, make_generator
+from toollery.generation import MockGenerator
 from toollery.manuals import ManualCache
 from toollery.storage import atomic_json
 from .sources import compile_sources, source_environment
@@ -150,10 +151,11 @@ def run(args, output):
         config['budget'] = args.budget
     write_patch(output / 'cordis.patch.json', config['model'], config.get('tool_sources'), ROOT)
     generator_config = read_generator(config, ROOT)
-    generator = MockGenerator() if args.offline_smoke else make_generator(generator_config)
+    generator = MockGenerator() if args.offline_smoke else configured_generator(
+        generator_config, ROOT, require_executable=not args.cache_only and not args.spec_only and not args.toollery_off)
     key = 'local-mock-key' if args.offline_smoke else (load_key(config['api_key_env'], ROOT, required=not args.prepare_only) or 'preparation-only-no-chat')
     if not args.offline_smoke and not args.spec_only and not args.cache_only and not args.toollery_off:
-        load_key(generator_config['parameters']['api_key_env'], ROOT)
+        load_generator_credentials(generator_config, ROOT)
     cache = ManualCache(ROOT / ('.toollery/cache-mock' if args.offline_smoke else config['cache_dir']))
     results = []
     with ExitStack() as stack:

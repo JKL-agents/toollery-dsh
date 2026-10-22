@@ -45,6 +45,10 @@ The bundled launcher uses DSH's `deepseek-official` provider and ordinary comple
 
 `{python}` becomes the current interpreter. The bridge calls `/chat/completions`; bases ending in `/v1` are accepted. It uses normalized tool evidence and the Appendix A.1 prompt, validating exactly three query/thought entries. Only query text is indexed; thoughts remain in the cache. The count is fixed at three in v0.1.0.
 
+Custom generator commands run with the directory containing `toollery.json` as their working directory, including when the shell is elsewhere. Relative script arguments resolve there. Bare executable names use PATH; explicit relative executable paths (such as `./tools/generator.exe`) resolve there too. `{python}` avoids assuming a `python` command or activated virtual environment. A custom command may omit `parameters.api_key_env` if it does not need an API key; when supplied, that variable is loaded from the config directory `.env`. Windows batch commands use the same argument restrictions as the [host bridge](integration.md).
+
+The generator executable is required only when generation is enabled. Cache-only startup still needs its configuration for cache identity, but does not require the external generator to be installed or its API credentials to be present. Doctor reports generator executable availability as a separate optional check.
+
 ## Credentials
 
 ```dotenv

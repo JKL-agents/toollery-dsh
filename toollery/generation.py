@@ -8,6 +8,7 @@ from typing import Protocol
 
 from .evidence import Evidence
 from .storage import canonical
+from .processes import child_command
 
 PROMPT_VERSION = "toollery_appendix_a1_v1"
 # Verbatim wording from Toollery, Appendix A.1; only PDF line wraps removed.
@@ -86,13 +87,14 @@ class MockGenerator:
 class CommandGenerator:
     """A local provider bridge: JSON on stdin, JSON on stdout, never shell=True."""
 
-    def __init__(self, config: dict):
+    def __init__(self, config: dict, *, cwd=None):
         command = config.get("command")
         if not isinstance(command, list) or not command or any(not isinstance(part, str) or not part for part in command):
             raise ValueError("command must be a nonempty array of program/argument strings")
         if not isinstance(config.get("model"), str) or not config["model"].strip():
             raise ValueError("A command generator requires an explicit model identifier")
         self.command = command
+        self.cwd = cwd
         self.timeout = float(config.get("timeout_seconds", 120))
         if self.timeout <= 0:
             raise ValueError("timeout_seconds must be positive")
@@ -123,7 +125,9 @@ class CommandGenerator:
             "model": self.contract["model"],
             "parameters": self.contract["parameters"],
         }
-        result = subprocess.run(self.command, input=canonical(request), capture_output=True, text=True, encoding="utf-8", timeout=self.timeout, check=False)
+        result = subprocess.run(child_command(self.command, self.cwd), cwd=self.cwd,
+                                input=canonical(request), capture_output=True, text=True,
+                                encoding="utf-8", timeout=self.timeout, check=False)
         if result.returncode:
             # Never reflect arbitrary stderr/stdout. Only allow fixed codes.
             code = "bridge_error"
@@ -146,10 +150,10 @@ class CommandGenerator:
         return GenerationResult(validate_entries(manuals[name], count), usage)
 
 
-def make_generator(config: dict) -> Generator:
+def make_generator(config: dict, *, cwd=None) -> Generator:
     provider = config.get("provider", "mock")
     if provider == "mock":
         return MockGenerator()
     if provider == "command":
-        return CommandGenerator(config)
+        return CommandGenerator(config, cwd=cwd)
     raise ValueError(f"Unknown generator provider: {provider}")

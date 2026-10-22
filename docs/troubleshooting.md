@@ -5,6 +5,8 @@ Start with `toollery-dsh doctor --config path/to/toollery.json`; add `--require-
 | Symptom | Action |
 | --- | --- |
 | Command not found | Use the environment's `Scripts/toollery-dsh.exe` on Windows or activate that environment. |
+| Node missing or incompatible | Install Node 22.19+ on 22.x, or 24+; reopen the terminal and run `node --version` there. Do not rely on an IDE's private runtime/PATH. Node 23 is unsupported. |
+| pnpm missing or incompatible | `setup-web` requires pnpm 11.x. Check `pnpm --version` in the same terminal. pnpm is optional after runtime installation. |
 | Cannot read configuration | Pass `--config`. `init` preserves existing files; compare templates when upgrading. |
 | Missing credentials | Put `.env` next to the config. Use the separate key names or shared `TOOLLERY_API_KEY`. |
 | Missing manuals / snapshot HTTP 503 | Run `prepare` using the same config/interpreter/generator. Inspect `manual-preparation.json` in the report directory. |
@@ -13,6 +15,9 @@ Start with `toollery-dsh doctor --config path/to/toollery.json`; add `--require-
 | Interrupted generation leaves a lock | Stop processes using the cache, then remove only that stale `.lock`. Locks prevent duplicate paid calls. |
 | Web/MCP runtime missing | Install Node/pnpm and run `setup-web`. It uses the shipped lockfile, not global DSH packages. |
 | Port busy | Stop the old server or use `--port 3081`. |
+| Web opens but rejects access | Copy the complete authenticated `dsh web:` URL from the running terminal, including `?token=...`. The bare localhost URL does not authenticate a new browser. |
+| Custom generator or host works only from one directory | Pass an absolute `--config`. Commands run from that config's directory; use explicit executable paths or install commands on PATH. |
+| MCP fails before discovery | Check its executable, configured `cwd`, referenced environment variables and pinned runtime (`setup-web`), then restart. `doctor` checks local prerequisites without contacting servers. |
 | No controls yet | Select a workspace and create/open a session; controls wait for discovery/preparation. |
 | ON fails after OFF startup | Run `prepare` and restart, or explicitly permit generation at launch. |
 | No matching tool / few candidates | Top-k omits zero-score tools. Restate the capability, increase k, use all or OFF. |

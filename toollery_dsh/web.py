@@ -8,16 +8,17 @@ import json
 import os
 from pathlib import Path
 import socket
-import shutil
 import subprocess
 import sys
 import threading
 
-from .configuration import ASSETS, load_config, generator_config as read_generator, load_key, load_source_credentials, runtime_package
+from .configuration import (ASSETS, ConfigurationError, load_config, generator_config as read_generator,
+                            configured_generator, load_generator_credentials, load_key, load_source_credentials)
+from .runtime import web_runtime as _web_runtime
 from .chat import write_patch
 from .sources import source_environment
 from toollery.adapters.dsh import DSHBridge
-from toollery.generation import MockGenerator, make_generator
+from toollery.generation import MockGenerator
 from toollery.manuals import ManualCache
 from toollery.storage import atomic_json, digest
 
@@ -54,19 +55,7 @@ def write_web_patch(path, config, base_url, home=None):
 
 
 def web_runtime(home=None):
-    package = runtime_package(home or Path.cwd()).parent
-    if not (package / 'package.json').is_file():
-        print('Install the pinned Web runtime first: toollery-dsh setup-web --config path/to/toollery.json', flush=True)
-        raise RuntimeError('DSH Web runtime is not installed')
-    metadata = json.loads((package / 'package.json').read_text(encoding='utf-8'))
-    if metadata['version'] != '0.2.1-rc.2':
-        raise RuntimeError('This integration requires DSH 0.2.1-rc.2')
-    node = shutil.which('node')
-    if not node:
-        raise RuntimeError('Node.js is required for the official DSH Web runtime')
-    entry = metadata['bin']
-    entry = entry if isinstance(entry, str) else entry['dsh']
-    return [node, str(package / entry)], metadata['version']
+    return _web_runtime(home or Path.cwd())
 
 
 def run(args, output):
@@ -77,13 +66,17 @@ def run(args, output):
         if getattr(args, arg) is not None:
             config[field] = getattr(args, arg)
     # Report a port conflict before spawning a process or making model calls.
-    with socket.socket() as probe:
-        probe.bind(('127.0.0.1', args.port))
+    try:
+        with socket.socket() as probe:
+            probe.bind(('127.0.0.1', args.port))
+    except OSError as error:
+        raise ConfigurationError(f'Cannot bind Web port {args.port}. Stop the existing server or choose another --port; check localhost permissions.') from error
     generator_config = read_generator(config, ROOT)
-    generator = MockGenerator() if args.offline else make_generator(generator_config)
+    generator = MockGenerator() if args.offline else configured_generator(
+        generator_config, ROOT, require_executable=args.generate_manuals)
     key = 'local-mock-key' if args.offline else load_key(config['api_key_env'], ROOT)
     if args.generate_manuals and not args.offline:
-        load_key(generator_config['parameters']['api_key_env'], ROOT)
+        load_generator_credentials(generator_config, ROOT)
     cache_path = config['cache_dir']
     if args.offline:
         cache_path = cache_path + '-web-mock' if config.get('tool_sources') else '.toollery/cache-web-mock'
@@ -140,7 +133,7 @@ def run(args, output):
             'tool_scope_contract': 'per_user_turn_v1', 'model': config['model'],
             'tool_source_ids': [item['id'] for item in config.get('tool_sources', [])],
         })
-        print(f'Official DSH Web + Toollery: http://127.0.0.1:{args.port}\n'
+        print('Starting official DSH Web + Toollery. Open the authenticated `dsh web:` URL printed below (including ?token=...).\n'
               f'Reports: {output}\nSelect a workspace, then use /toollery status or send a prompt. Ctrl+C stops the server.', flush=True)
         process = subprocess.Popen(command, cwd=ROOT, env=env,
                                    creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == 'nt' else 0)

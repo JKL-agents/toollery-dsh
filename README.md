@@ -18,10 +18,12 @@ The default is **ON / spec_manual / top_k / k=3**. OFF gives DSH the full origin
 ## Requirements
 
 - Python 3.12 or later; Python 3.12.7 was tested on Windows.
-- Node.js 22.19+ or 24+ and pnpm 11 for Web/MCP. Node 24.19 / pnpm 11.25 were tested.
+- Node.js 22.19+ on the 22.x line, or 24+, for Web and the filesystem preset. Node 23 is unsupported. pnpm 11.x is required to install the pinned Web/MCP runtime, but not to run it afterward. Node 24.19 / pnpm 11.25 were tested.
 - A chat API compatible with DSH's configured DeepSeek Messages provider, and an OpenAI Chat Completions-compatible API for manuals. Defaults use `deepseek-flash` for both; these settings are independent.
 
 DSH is pinned to Python `0.2.1rc2` / npm `0.2.1-rc.2`. Windows is verified; Linux and macOS are not yet verified. Distribution is through GitHub, not npm or PyPI.
+
+Install [Python](https://www.python.org/downloads/), [Node.js](https://nodejs.org/en/download) and [pnpm](https://pnpm.io/installation) as needed. After installation, reopen PowerShell and check `node --version` and `pnpm --version` **in the terminal you will use to launch Web**. An IDE or coding agent may have its own tools on PATH; that does not make them available in a normal terminal. The bundled terminal demo uses the Python SDK runtime and does not require a separate Node/pnpm installation. Configured MCP servers may require additional executables.
 
 ## Install and try it
 
@@ -61,7 +63,7 @@ Copy-Item my-workspace/.env.example my-workspace/.env
 & .venv/Scripts/toollery-dsh.exe web --config my-workspace/toollery.json --port 3080
 ```
 
-Open the printed localhost URL, select a workspace, and start a conversation. The composer shows the switch and retrieval controls. Changes apply to the next turn; a turn's subset stays fixed through its tool calls. Cards show the full pool, selected tools and actual calls. Stop with Ctrl+C. The launcher binds to `127.0.0.1`.
+Open the authenticated `dsh web:` URL printed by DSH **including its `?token=...`**, select a workspace, and start a conversation. The composer shows the switch and retrieval controls. Changes apply to the next turn; a turn's subset stays fixed through its tool calls. Cards show the full pool, selected tools and actual calls. Stop with Ctrl+C. The launcher binds to `127.0.0.1`.
 
 Try “Please use the matching tool to add 19 and 23,” then “Convert 20 degrees Celsius to Fahrenheit using a tool.” Change k or switch OFF to inspect tool availability. These examples are not benchmark evidence.
 

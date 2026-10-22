@@ -7,26 +7,27 @@ import importlib.metadata
 import json
 import os
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import sys
 
 from . import __version__
-from .configuration import (ASSETS, ConfigurationError, DSH_VERSION, initialize,
-                            load_config, load_key, runtime_package)
+from .configuration import (ASSETS, ConfigurationError, initialize,
+                            configured_generator, generator_config, load_config, load_key,
+                            load_source_credentials)
+from .runtime import child_command, require_tool, runtime_entry
+from .sources import compile_sources
 
 
 def setup_web(config_path):
     _, home = load_config(config_path)
-    pnpm = shutil.which('pnpm')
-    if not pnpm:
-        raise ConfigurationError('Install pnpm 11 first, then run toollery-dsh setup-web again.')
+    require_tool('node')
+    require_tool('pnpm')
     target = home / '.toollery/web-runtime'
     target.mkdir(parents=True, exist_ok=True)
     for name in ('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'):
         shutil.copyfile(ASSETS / 'dsh/web-runtime' / name, target / name)
-    return subprocess.call([pnpm, '--dir', str(target), 'install', '--frozen-lockfile', '--ignore-scripts'])
+    return subprocess.call(child_command(['pnpm', '--dir', str(target), 'install', '--frozen-lockfile', '--ignore-scripts'], cwd=home), cwd=home)
 
 
 def doctor(config_path, require_web=False):
@@ -41,25 +42,45 @@ def doctor(config_path, require_web=False):
         except importlib.metadata.PackageNotFoundError:
             version = 'not installed'
         add(package, version == '0.2.1rc2', version)
-    node = shutil.which('node')
-    version = subprocess.check_output([node, '--version'], text=True).strip() if node else ''
-    numbers = re.match(r'v(\d+)\.(\d+)\.(\d+)', version)
-    supported = numbers and (tuple(map(int, numbers.groups())) >= (24, 0, 0)
-                             or (int(numbers[1]) == 22 and tuple(map(int, numbers.groups())) >= (22, 19, 0)))
-    add('node', supported, version or 'not installed', required=require_web or bool(config.get('tool_sources')))
-    add('pnpm', shutil.which('pnpm') is not None, 'found' if shutil.which('pnpm') else 'not installed', required=require_web)
+    sources = config.get('tool_sources')
+    filesystem = isinstance(sources, list) and any(isinstance(item, dict) and item.get('type') == 'filesystem' for item in sources)
+    mcp = isinstance(sources, list) and any(isinstance(item, dict) and item.get('type') in {'filesystem', 'mcp'} for item in sources)
+    for name, required in [('node', require_web or filesystem), ('pnpm', False)]:
+        try:
+            _, version = require_tool(name)
+            add(name, True, version + (' (setup-web only)' if name == 'pnpm' else ''), required)
+        except ConfigurationError as error:
+            add(name, False, str(error) + (' Required only for setup-web.' if name == 'pnpm' else ''), required)
     required_assets = ['demo-tools.mjs', 'dsh/toollery.mjs', 'dsh/sources.mjs',
                        'dsh/ui/client.js', 'dsh/ui/index.js', 'dsh/ui/package.json',
                        'dsh/web-controls.mjs', 'dsh/web-runtime/pnpm-lock.yaml']
     missing = [name for name in required_assets if not (ASSETS / name).is_file()]
     add('installed assets', not missing, ', '.join(missing) or 'complete')
-    add('manual config', (home / config['generator_config']).is_file(), config['generator_config'])
-    package = runtime_package(home)
     try:
-        web_version = json.loads(package.read_text(encoding='utf-8'))['version']
-    except (OSError, ValueError, KeyError):
-        web_version = 'not installed; run toollery-dsh setup-web'
-    add('web runtime', web_version == DSH_VERSION, web_version, required=require_web)
+        generation = generator_config(config, home)
+        configured_generator(generation, home, require_executable=False)
+        add('manual config', True, 'valid (no generation request)')
+    except ConfigurationError as error:
+        add('manual config', False, str(error))
+    else:
+        if generation.get('provider') == 'command':
+            try:
+                child_command(generation['command'], cwd=home)
+                add('manual generator executable', True, 'found; required only when generating manuals', required=False)
+            except ConfigurationError as error:
+                add('manual generator executable', False, str(error) + ' Required only when generating manuals.', required=False)
+    try:
+        _, web_version = runtime_entry(home)
+        add('web runtime', True, web_version, required=require_web or mcp)
+    except ConfigurationError as error:
+        add('web runtime', False, str(error), required=require_web or mcp)
+    if sources is not None:
+        try:
+            load_source_credentials(config, home)
+            compile_sources(sources, home)
+            add('tool sources', True, 'local paths, executables and referenced credentials checked; servers not contacted')
+        except ConfigurationError as error:
+            add('tool sources', False, str(error))
     add('chat credential', bool(load_key(config['api_key_env'], home, required=False)),
         'configured' if load_key(config['api_key_env'], home, required=False) else 'not configured (offline checks still work)', required=False)
     return {'ready': all(item['ok'] for item in checks if item['required']),

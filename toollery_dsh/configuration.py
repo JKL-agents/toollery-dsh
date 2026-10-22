@@ -113,8 +113,34 @@ def generator_config(config, home):
 def resolve_generator(value):
     value = dict(value)
     if 'command' in value:
+        if not isinstance(value['command'], list) or not value['command'] or any(not isinstance(part, str) or not part for part in value['command']):
+            raise ConfigurationError('Generator command must be a nonempty array of strings')
         value['command'] = [sys.executable if part == '{python}' else part for part in value['command']]
     return value
+
+
+def configured_generator(value, home, *, require_executable=True):
+    from toollery.generation import make_generator
+    from .runtime import child_command
+    try:
+        generator = make_generator(value, cwd=home)
+        if require_executable and value.get('provider') == 'command':
+            child_command(value['command'], cwd=home)
+        return generator
+    except ValueError as error:
+        raise ConfigurationError(str(error)) from error
+
+
+def load_generator_credentials(value, home):
+    # Custom/local generators need not use an API or this project's key layout.
+    parameters = value.get('parameters', {})
+    if not isinstance(parameters, dict):
+        raise ConfigurationError('Generator parameters must be an object')
+    name = parameters.get('api_key_env')
+    if name is not None:
+        if not isinstance(name, str) or not name.strip():
+            raise ConfigurationError('Generator api_key_env must be a nonempty string')
+        load_key(name, home)
 
 
 def load_environment(home, names):
@@ -148,10 +174,21 @@ def load_key(variable, home=None, *, required=True):
 
 def load_source_credentials(config, home):
     names = []
-    for source in config.get('tool_sources', []):
-        names.extend(source.get('env_from', {}).values())
-        names.extend(source.get('headers_from', {}).values())
+    sources = config.get('tool_sources', [])
+    if not isinstance(sources, list):
+        raise ConfigurationError('tool_sources must be a list')
+    for source in sources:
+        if not isinstance(source, dict):
+            raise ConfigurationError('Every tool source must be an object')
+        for field in ('env_from', 'headers_from'):
+            refs = source.get(field, {})
+            if not isinstance(refs, dict) or any(not isinstance(key, str) or not isinstance(name, str) or not name.strip() for key, name in refs.items()):
+                raise ConfigurationError(f'{field} must map names to nonempty environment variable names')
+            names.extend(refs.values())
     load_environment(home, names)
+    for name in names:
+        if not os.environ.get(name):
+            raise ConfigurationError(f'Missing tool-source environment variable {name}. Set it in the environment or the config directory .env.')
 
 
 def runtime_package(home):

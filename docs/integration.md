@@ -76,6 +76,8 @@ toollery-dsh bridge --config existing-host/toollery.json --generate-manuals -- d
 
 The wrapper starts localhost Python, writes a patch, passes bridge URL/token through the environment and appends `--patch`. It configures native tool presentation and inserts Toollery, without demo tools. Optional configured sources are additional to host tools. The child retains its normal DSH provider configuration. This command is explicit opt-in; `--toollery-off` bypasses retrieval.
 
+The child process runs from the directory containing `toollery.json`. Explicit relative executable paths resolve there; bare commands use PATH. The wrapper checks executable availability before starting the bridge. This does not verify the custom host's version or provider compatibility.
+
 This path depends on the custom host/provider. Confirm:
 
 1. Pinned compatible DSH, native tools, no `run_code` projection.

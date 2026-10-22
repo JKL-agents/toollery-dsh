@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- Check Node/pnpm versions with bounded probes and actionable terminal/PATH diagnostics.
+- Resolve custom generator and host commands from the configuration directory; handle Windows npm shims consistently.
+- Validate Web runtime metadata/entry, busy ports, MCP executables/directories and referenced credentials before startup.
+- Make pnpm a setup-only requirement in doctor; check generator configuration without assuming custom generators need API credentials.
+- Clarify prerequisites and the authenticated Web URL in user guides.
+
 ## 0.1.0
 
 - Independent Toollery preparation, validated three-query manuals, persistent caches and BM25.

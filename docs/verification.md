@@ -1,5 +1,7 @@
 # v0.1.0 verification summary
 
+For subsequent, unreleased startup-hardening checks, see the [environment assumptions audit](environment-audit.md). The results below describe the published v0.1.0 verification.
+
 Verified on **Windows, 2026-10-22**, with Python 3.12.7, Node.js 24.19, pnpm 11.25 and pinned DSH `0.2.1rc2` (npm `0.2.1-rc.2`). These checks use scripted model responses and mock manuals, with no paid requests. Real-provider findings are in the [experiment summary](experiments/README.md).
 
 ## Core observations
