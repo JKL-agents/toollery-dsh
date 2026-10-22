@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toollery · Starting demo</title>
+<style>
+:root{font:16px/1.5 system-ui,sans-serif;color:#202b39;background:#f3f5f8}*{box-sizing:border-box}body{max-width:660px;margin:12vh auto;padding:0 22px}main{background:white;border:1px solid #dce2ea;border-radius:16px;padding:32px}h1{font-size:27px;letter-spacing:-.7px;margin:0 0 8px}p{color:#576475}progress{display:block;width:100%;height:14px;accent-color:#2557bd;margin:24px 0}ol{list-style:none;padding:0;display:flex;gap:12px;flex-wrap:wrap;font-size:14px;color:#657184}li{padding:6px 10px;background:#eef1f5;border-radius:6px}li[aria-current=step]{color:#17469e;background:#e7efff;font-weight:600}.done{color:#237247;background:#e9f5ee}#detail,#elapsed{font-size:14px;margin:6px 0}#recovery{color:#a42121}footer{font-size:13px;color:#657184;margin-top:24px}[hidden]{display:none!important}@media(prefers-reduced-motion:reduce){progress{animation:none}}
+</style>
+<main>
+<h1>Starting your Toollery demo</h1>
+<div role="status" aria-live="polite"><p id="message">Connecting to the local launcher…</p></div>
+<progress id="progress" aria-label="Demo startup"></progress>
+<ol aria-label="Startup stages">
+<li id="checking">1. Check environment</li>
+<li id="installing">2. Install dependencies</li>
+<li id="starting">3. Start DSH</li>
+</ol>
+<p id="detail">First use may download DSH Web dependencies, even after the setup page has opened.</p>
+<p id="elapsed">Elapsed: 0s</p>
+<p id="recovery" role="alert" hidden></p>
+<p id="hint">Please keep the terminal open. This tab will open DSH automatically when ready.</p>
+<footer>The moving bar indicates work in progress, not a download percentage. Later starts reuse installed dependencies.</footer>
+</main>
+<script src="/waiting.js"></script>
+</html>

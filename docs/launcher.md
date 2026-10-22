@@ -8,7 +8,7 @@ This launcher creates a standalone demo with its own DSH environment. It does no
 
 Extract the repository ZIP into a writable folder, then double-click `Start-Toollery.cmd`. Keep its terminal open. First use needs internet access to GitHub, nodejs.org, PyPI and the npm registry. The script downloads pinned uv, private Python 3.12.12, Node.js 22.19.0 and pnpm 11.25.0, then installs Toollery and DSH. uv and Node archives are checked against pinned SHA-256 hashes. Nothing is installed globally; Windows x64 is supported.
 
-The setup page opens in your default browser. Choose settings and select **Start demo**. Initial Web/MCP installation may take several minutes; later starts reuse the installation. If the new tab does not open, select **Open DSH demo**. DSH normally enters the workspace automatically; if that fails, use its workspace picker. Accept DSH's own first-run notice if shown.
+The setup page opens in your default browser. Choose settings and select **Start demo**. Initial Web/MCP installation happens **after** the setup page opens and may take several minutes; later starts reuse the installation. The waiting tab shows the current startup stage, elapsed time and package counters when available. Its moving progress bar indicates ongoing work, not an estimated download percentage. It opens DSH automatically when the Web server is ready, or displays a failure message if startup fails. If the new tab does not open, select **Open DSH demo** once it appears on the setup page. DSH normally enters the workspace automatically; if that fails, use its workspace picker. Accept DSH's own first-run notice if shown.
 
 ## Choose a demo
 

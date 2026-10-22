@@ -2,7 +2,7 @@
 const token = new URLSearchParams(location.hash.slice(1)).get('token') || ''
 const form = document.querySelector('#settings')
 const errorBox = document.querySelector('#error')
-let loaded = false, demoWindow = null, lastUrl = '', pending = false
+let loaded = false, demoWindow = null, pending = false
 async function api(path, value) {
   const response = await fetch('/api/' + path, {
     method: value === undefined ? 'GET' : 'POST',
@@ -37,10 +37,6 @@ function show(data) {
   link.hidden = !data.url
   if (data.url) {
     link.href = data.url
-    if (data.url !== lastUrl) {
-      lastUrl = data.url
-      if (demoWindow && !demoWindow.closed) demoWindow.location = data.url
-    }
   }
   const active = data.phase === 'starting' || data.phase === 'ready'
   document.querySelector('#start').disabled = active || pending
@@ -58,8 +54,8 @@ form.addEventListener('submit', async event => {
     body[field.name] = field.type === 'checkbox' ? field.checked : field.type === 'number' ? Number(field.value) : field.value
   }
   // Open from the user's click so a delayed dependency install does not trigger a popup block.
-  demoWindow = window.open('about:blank', 'toollery-demo')
-  if (demoWindow) { demoWindow.opener = null; demoWindow.document.title = 'Preparing Toollery demo'; demoWindow.document.body.textContent = 'Preparing DSH. This tab will open the demo when ready. Keep the setup page and terminal open.' }
+  demoWindow = window.open('/waiting#token=' + encodeURIComponent(token), 'toollery-demo')
+  if (demoWindow) demoWindow.opener = null
   try {
     const data = await api('start', body)
     form.elements.chat_key.value = ''; form.elements.manual_key.value = ''

@@ -13,6 +13,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import uuid
 import webbrowser
 from urllib.parse import urlsplit
@@ -127,11 +128,13 @@ class Launcher:
         self.process = None
         self.worker = None
         self.cancel = threading.Event()
+        self.started_at = None
 
     def snapshot(self):
         with self.lock:
             keys = read_keys(self.home)
             return dict(**self.state, settings=dict(self.settings),
+                        elapsed_seconds=int(time.monotonic() - self.started_at) if self.started_at else 0,
                         chat_key_configured=bool(keys[KEYS[0]]), manual_key_configured=bool(keys[KEYS[1]]))
 
     def start(self, body):
@@ -164,7 +167,9 @@ class Launcher:
             self.settings = settings
             atomic_json(self.home / 'settings.json', settings)
             self.cancel = threading.Event()
-            self.state = dict(phase='starting', message='Preparing the Web runtime...', url='', port=None)
+            self.started_at = time.monotonic()
+            self.state = dict(phase='starting', stage='checking',
+                              message='Checking the Web runtime...', url='', port=None, packages=None)
             self.worker = threading.Thread(target=self._run, args=(settings, keys), daemon=True)
             self.worker.start()
 
@@ -211,16 +216,22 @@ class Launcher:
             try:
                 runtime_entry(home)
             except ConfigurationError:
+                with self.lock:
+                    self.state.update(stage='installing', message='Installing DSH Web dependencies. First use may take several minutes.')
                 setup = self._spawn([*command, 'setup-web', '--config', str(runtime_config)], env, home)
                 if setup is None:
                     return
-                # Drain output without reflecting npm/provider content or credentials into UI.
+                # Expose only numeric pnpm counters, never raw output or credentials.
                 timeout = threading.Timer(600, stop_tree, args=(setup,))
                 timeout.daemon = True
                 timeout.start()
                 try:
-                    for _ in setup.stdout:
-                        pass
+                    for line in setup.stdout:
+                        progress = re.fullmatch(r'Progress: resolved (\d+), reused (\d+), downloaded (\d+), added (\d+)(?:, done)?\s*', line.strip())
+                        if progress:
+                            with self.lock:
+                                self.state['packages'] = dict(zip(
+                                    ('resolved', 'reused', 'downloaded', 'added'), map(int, progress.groups())))
                     code = setup.wait()
                 finally:
                     timeout.cancel()
@@ -239,7 +250,7 @@ class Launcher:
             elif settings['generate']:
                 args.append('--generate-manuals')
             with self.lock:
-                self.state.update(message='Starting DSH...', port=port)
+                self.state.update(stage='starting', message='Starting DSH Web. The demo will open automatically when its server is ready.', port=port)
             process = self._spawn(args, env, home)
             if process is None:
                 return
@@ -248,7 +259,7 @@ class Launcher:
                 match = re.search(r'dsh web: (http://127\.0\.0\.1:' + str(port) + r'/\?token=[A-Za-z0-9._~%=-]+)', line)
                 with self.lock:
                     if match and not self.cancel.is_set():
-                        self.state.update(phase='ready', message='DSH is ready. Open the demo below.', url=match[1])
+                        self.state.update(phase='ready', stage='ready', message='DSH is ready. Open the demo below.', url=match[1])
                     elif 'Session not ready (' in line:
                         self.state.update(message='Manual preparation failed. If cache is missing, stop and enable generation; otherwise check API configuration and preparation reports.')
                     elif line.startswith('Ready: ') and re.fullmatch(r'Ready: \d+/\d+ manuals; \d+ cache hits; \d+ generated\.\s*', line):
@@ -306,8 +317,12 @@ def make_server(launcher, port=0):
         def do_GET(self):
             if self.headers.get('Host') != f'127.0.0.1:{self.server.server_port}':
                 return self.reply(403, {'error': 'Invalid host.'})
-            if self.path in ('/', '/app.js'):
-                name, kind = ('launcher.html', 'text/html; charset=utf-8') if self.path == '/' else ('launcher.js', 'text/javascript; charset=utf-8')
+            pages = {'/': ('launcher.html', 'text/html; charset=utf-8'),
+                     '/app.js': ('launcher.js', 'text/javascript; charset=utf-8'),
+                     '/waiting': ('waiting.html', 'text/html; charset=utf-8'),
+                     '/waiting.js': ('waiting.js', 'text/javascript; charset=utf-8')}
+            if self.path in pages:
+                name, kind = pages[self.path]
                 return self.reply(200, (ASSETS / name).read_bytes(), kind)
             if self.path == '/api/status' and self.authorized():
                 return self.reply(200, launcher.snapshot())

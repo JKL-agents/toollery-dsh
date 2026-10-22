@@ -27,7 +27,7 @@ def setup_web(config_path):
     target.mkdir(parents=True, exist_ok=True)
     for name in ('package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml'):
         shutil.copyfile(ASSETS / 'dsh/web-runtime' / name, target / name)
-    return subprocess.call(child_command(['pnpm', '--dir', str(target), 'install', '--frozen-lockfile', '--ignore-scripts'], cwd=home), cwd=home)
+    return subprocess.call(child_command(['pnpm', '--dir', str(target), 'install', '--frozen-lockfile', '--ignore-scripts', '--reporter=append-only'], cwd=home), cwd=home)
 
 
 def doctor(config_path, require_web=False):

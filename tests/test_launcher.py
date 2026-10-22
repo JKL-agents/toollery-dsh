@@ -1,5 +1,6 @@
 """Launcher boundaries: local credentials, authenticated HTTP and process lifecycle."""
 import http.client
+import io
 import json
 import os
 from pathlib import Path
@@ -11,12 +12,35 @@ import threading
 import time
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 from toollery_dsh.configuration import ConfigurationError, initialize
 from toollery_dsh.launcher import Launcher, available_port, make_server, read_keys, validate_settings
 
 
 class LauncherTests(unittest.TestCase):
+    def test_install_progress_exposes_only_counters_before_web_start(self):
+        with tempfile.TemporaryDirectory() as folder:
+            launcher = Launcher(folder)
+            states = []
+
+            def spawn(command, env, cwd):
+                states.append(launcher.snapshot())
+                output = ('untrusted output with sentinel-secret\n'
+                          'Progress: resolved 120, reused 40, downloaded 60, added 100\n'
+                          'Progress: resolved 120, reused 40, downloaded 80, added 120, done\n'
+                          if 'setup-web' in command else '')
+                child = SimpleNamespace(stdout=io.StringIO(output), wait=lambda: 0, poll=lambda: 0)
+                launcher.process = child
+                return child
+
+            with patch('toollery_dsh.launcher.runtime_entry', side_effect=ConfigurationError('missing')):
+                with patch.object(launcher, '_spawn', side_effect=spawn):
+                    launcher._run(validate_settings(dict(offline=True)), {})
+            self.assertEqual([state['stage'] for state in states], ['installing', 'starting'])
+            self.assertEqual(states[1]['packages'], dict(resolved=120, reused=40, downloaded=80, added=120))
+            self.assertNotIn('sentinel-secret', json.dumps(states))
+
     def test_port_conflict_and_invalid_configuration(self):
         with socket.socket() as occupied:
             occupied.bind(('127.0.0.1', 0))
@@ -112,6 +136,8 @@ class LauncherTests(unittest.TestCase):
 
             try:
                 self.assertEqual(request('GET', '/')[0], 200)
+                self.assertEqual(request('GET', '/waiting')[0], 200)
+                self.assertEqual(request('GET', '/waiting.js')[0], 200)
                 self.assertEqual(request('GET', '/api/status')[0], 403)
                 headers = {'X-Toollery-Token': token}
                 self.assertEqual(request('GET', '/api/status', headers)[0], 200)

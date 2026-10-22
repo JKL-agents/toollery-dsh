@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Replace the static demo waiting tab with startup stages, an animated progress bar, elapsed time, safe package counters and failure feedback.
+
 ## 0.1.2
 
 - Add Windows x64 double-click installation with private Python, Node.js and pnpm; no preconfigured PATH required.
