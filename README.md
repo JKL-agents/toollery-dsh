@@ -29,6 +29,8 @@ Both recordings use the bundled 12-tool demo. Settings apply to the next turn; t
 
 ## Requirements
 
+For the Windows double-click launcher below, Python, Node.js and pnpm are installed privately. The following prerequisites apply to manual installation.
+
 - Python 3.12 or later; Python 3.12.7 was tested on Windows.
 - Node.js 22.19+ on the 22.x line, or 24+, for Web and the filesystem preset. Node 23 is unsupported. pnpm 11.x is required to install the pinned Web/MCP runtime, but not to run it afterward. Node 24.19 / pnpm 11.25 were tested.
 - A chat API compatible with DSH's configured DeepSeek Messages provider, and an OpenAI Chat Completions-compatible API for manuals. Defaults use `deepseek-flash` for both; these settings are independent.
@@ -38,6 +40,22 @@ DSH is pinned to Python `0.2.1rc2` / npm `0.2.1-rc.2`. Windows is verified; Linu
 Install [Python](https://www.python.org/downloads/), [Node.js](https://nodejs.org/en/download) and [pnpm](https://pnpm.io/installation) as needed. After installation, reopen PowerShell and check `node --version` and `pnpm --version` **in the terminal you will use to launch Web**. An IDE or coding agent may have its own tools on PATH; that does not make them available in a normal terminal. The bundled terminal demo uses the Python SDK runtime and does not require a separate Node/pnpm installation. Configured MCP servers may require additional executables.
 
 ## Install and try it
+
+### Windows: double-click setup
+
+Available on **main**; the v0.1.1 release archives predate this launcher.
+
+This is a standalone demo setup: it installs a private DSH environment without changing an existing installation. It is not yet a bundle installable through DSH's Plugins page. For the current wrapper-based path to an existing host, see [integration](docs/integration.md).
+
+1. Download and extract [the main-branch ZIP](https://github.com/JKL-agents/toollery-dsh/archive/refs/heads/main.zip), or clone this repository.
+2. Double-click **`Start-Toollery.cmd`**. First use downloads private Python 3.12.12, Node.js 22.19.0, pnpm 11.25.0 and DSH dependencies. No global installation or administrator rights are needed.
+3. In the browser setup page, choose a tool pool, ON/OFF, retrieval mode and k. Enter API settings and allow missing-manual generation for first real use, then select **Start demo**.
+
+For a free scripted preview, select **Scripted preview** with the utility pool and try `Use add_numbers to add 19 and 23.` It exercises real DSH/tool execution with a scripted model and mock manuals; it is not arbitrary chat.
+
+The launcher opens the authenticated DSH page and enters a demo workspace. If the browser blocks the new tab, use **Open DSH demo**. Stop with **Stop demo**, or Ctrl+C in the terminal. Cached manuals and settings survive restarts. [Launcher guide](docs/launcher.md) covers separate model keys, filesystem tools, local files and troubleshooting.
+
+### Manual installation
 
 These commands use PowerShell. Activation is optional; use the environment's executables directly if activation is restricted.
 
@@ -101,6 +119,7 @@ The allowed directory is `filesystem-demo/playground`, created by `init`. Ask th
 - [Configuration and cache](docs/configuration.md)
 - [Tool sources and existing DSH integration](docs/integration.md)
 - [Troubleshooting](docs/troubleshooting.md)
+- [Windows launcher](docs/launcher.md)
 - [Changelog](CHANGELOG.md) and [maintainer publishing checklist](docs/publishing.md)
 
 ## Evidence and limitations
@@ -130,7 +149,7 @@ docs/                User guides, experiment evidence and release drafts
 ```powershell
 & .venv/Scripts/python.exe -m pip install -e '.[dev]'
 & .venv/Scripts/python.exe -m unittest discover -s tests -v
-node --test tests/test_dsh_snapshot.mjs tests/test_dsh_sources.mjs tests/test_dsh_ui.mjs
+node --test tests/test_dsh_snapshot.mjs tests/test_dsh_sources.mjs tests/test_dsh_ui.mjs tests/test_dsh_launcher.mjs
 & .venv/Scripts/python.exe -m build
 ```
 

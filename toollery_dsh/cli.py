@@ -94,6 +94,10 @@ def parser():
     init = sub.add_parser('init', help='Create local templates without overwriting existing files')
     init.add_argument('directory', nargs='?', default='.')
     init.add_argument('--preset', choices=['demo', 'filesystem'], default='demo')
+    launcher = sub.add_parser('launcher', help='Open local demo setup in the browser')
+    launcher.add_argument('--directory', type=Path, default=Path('.toollery-launcher/workspace'))
+    launcher.add_argument('--port', type=int, default=0, help='Setup page port; 0 selects a free port')
+    launcher.add_argument('--no-open', action='store_true')
     for name in ('doctor', 'setup-web', 'prepare', 'chat', 'web', 'bridge'):
         p = sub.add_parser(name)
         p.add_argument('--config', default='toollery.json', type=Path)
@@ -133,6 +137,11 @@ def main(argv=None):
     args = p.parse_args(argv)
     output = None
     try:
+        if args.command == 'launcher':
+            if not 0 <= args.port <= 65535:
+                p.error('port must be 0..65535')
+            from .launcher import run
+            return run(args)
         if args.command == 'init':
             print(json.dumps(initialize(args.directory, args.preset), indent=2))
             print('Copy .env.example to .env, fill API credentials, then run toollery-dsh prepare.')

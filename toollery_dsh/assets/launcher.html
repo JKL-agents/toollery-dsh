@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Toollery · Demo setup</title>
+<style>
+:root{font:16px/1.5 system-ui,sans-serif;color:#202b39;background:#f3f5f8}*{box-sizing:border-box}body{max-width:850px;margin:42px auto;padding:0 22px}h1{font-size:30px;letter-spacing:-1px;margin-bottom:4px}h2{font-size:19px;margin:0 0 18px}p{color:#576475}section{background:white;border:1px solid #dce2ea;border-radius:14px;padding:24px;margin:18px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}label{display:block;font-size:14px;font-weight:600}input:not([type=checkbox]),select{display:block;width:100%;padding:10px;border:1px solid #b9c4d2;border-radius:7px;font:inherit;margin-top:5px}input[type=checkbox]{accent-color:#2557bd;margin-right:8px}small{display:block;color:#657184;font-weight:400;margin-top:5px}button,a.button{display:inline-block;background:#2557bd;color:white;border:0;border-radius:8px;padding:11px 20px;font:600 15px system-ui;cursor:pointer;text-decoration:none}button.secondary{background:#e8edf5;color:#26384e}button:disabled{opacity:.5;cursor:default}.check{margin-top:16px;font-weight:500}.status{border-left:4px solid #2557bd;padding-left:14px}#message{margin:5px 0}#error{color:#a42121}#demo-link{margin-top:10px}.actions{display:flex;gap:12px;align-items:center}details{margin-top:18px}summary{cursor:pointer;font-weight:600}.hint{font-size:14px}code{background:#eef1f5;padding:2px 4px}footer{font-size:13px;color:#657184;margin:25px 0} [hidden]{display:none!important}@media(max-width:600px){.grid{grid-template-columns:1fr}body{margin-top:24px}}
+</style>
+<h1>Toollery for DSH</h1>
+<p>Configure your demo, then open the official DSH Web UI.</p>
+<form id="settings">
+<section>
+<h2>Demo</h2>
+<div class="grid">
+<label>Tool pool<select name="pool"><option value="demo">12 utility tools</option><option value="filesystem">Filesystem playground (real MCP tools)</option><option value="custom">Custom configuration</option></select></label>
+<label>Web port<input name="port" type="number" min="1" max="65535" value="3080"><small>A free alternative is used if this port is busy.</small></label>
+</div>
+<label id="custom-row" class="check" hidden>Path to toollery.json<input name="custom_config" placeholder="C:\path\to\toollery.json"><small>Uses that file's models, credentials and sources. The API fields below are ignored.</small></label>
+<label class="check"><input type="checkbox" name="enabled" checked>Enable Toollery</label>
+<div class="grid" style="margin-top:16px">
+<label>Search representation<select name="mode"><option value="spec_manual">Spec + manual</option><option value="spec">Spec</option><option value="manual">Manual</option></select></label>
+<label>Candidate budget<select name="budget"><option value="top_k">Top-k</option><option value="all">All (rank the full pool)</option></select></label>
+<label>k<input name="k" type="number" min="1" max="100000" value="3"><small>Ignored when Toollery is OFF or the budget is All.</small></label>
+</div>
+<label class="check"><input type="checkbox" name="offline">Scripted preview — no API key or charges</label>
+<small>Utility pool only. This uses a scripted model and isolated mock manuals, not an arbitrary chat model. Try “Use add_numbers to add 19 and 23.”</small>
+</section>
+<section id="api-section">
+<h2>Models and credentials</h2>
+<p class="hint">Chat uses a DSH-compatible Messages API. Manual generation uses an OpenAI Chat Completions-compatible API. Keys stay in a local plaintext <code>.env</code>; blank fields retain saved keys.</p>
+<div class="grid">
+<label>Chat model<input name="chat_model" value="deepseek-flash" required></label>
+<label>Chat API base URL<input name="chat_url" value="https://api.deepseek.com/anthropic" required></label>
+<label>Chat API key<input name="chat_key" type="password" autocomplete="off" placeholder="API key"><small id="chat-key-status"></small></label>
+</div>
+<details><summary>Separate manual-generation model or key</summary>
+<div class="grid" style="margin-top:16px">
+<label>Manual model<input name="manual_model" value="deepseek-flash" required></label>
+<label>Manual API base URL<input name="manual_url" value="https://api.deepseek.com" required></label>
+<label>Manual API key<input name="manual_key" type="password" autocomplete="off" placeholder="Use chat key if not separately configured"><small id="manual-key-status"></small></label>
+</div></details>
+</section>
+<section>
+<label><input type="checkbox" name="generate">Allow API calls to generate missing or stale manuals</label>
+<small>Needed on first real use with Toollery ON. Valid cached manuals are reused. Chat requests also use your paid API. Scripted preview never makes paid requests.</small>
+<p class="hint">Settings apply when you start a new demo. You can also change ON/OFF, mode and k inside the DSH conversation. Stop the demo before changing startup settings.</p>
+<div class="actions"><button id="start" type="submit">Start demo</button><button id="stop" type="button" class="secondary">Stop demo</button></div>
+<p id="error" role="alert"></p>
+</section>
+</form>
+<section class="status" aria-live="polite">
+<strong id="phase">Connecting…</strong><p id="message">Keep the launcher terminal open.</p>
+<a id="demo-link" class="button" target="toollery-demo" rel="noreferrer" hidden>Open DSH demo ↗</a>
+<p class="hint">First launch downloads the Web/MCP dependencies. If a new tab is blocked, use the link above. Closing this setup tab does not stop the demo; use Stop demo or Ctrl+C in the terminal.</p>
+</section>
+<footer>Independent community integration. Localhost only. Credentials and cached manuals are stored under your launcher directory. Filesystem tools can modify files inside the playground.</footer>
+<script src="/app.js"></script>
+</html>

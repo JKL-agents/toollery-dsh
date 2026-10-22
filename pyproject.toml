@@ -32,4 +32,4 @@ include = ["toollery", "toollery.*", "toollery_dsh"]
 namespaces = false
 
 [tool.setuptools.package-data]
-toollery_dsh = ["assets/*", "assets/dsh/*", "assets/dsh/ui/*", "assets/dsh/web-runtime/*", "assets/playground/*"]
+toollery_dsh = ["assets/*", "assets/dsh/*", "assets/dsh/ui/*", "assets/dsh/launcher-ui/*", "assets/dsh/web-runtime/*", "assets/playground/*"]

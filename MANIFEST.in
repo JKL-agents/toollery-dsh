@@ -1,10 +1,12 @@
 include LICENSE ACKNOWLEDGEMENTS.md CHANGELOG.md .env.example
+include Start-Toollery.cmd
 include DSH_Toollery_demo.gif DSH_Toollery_demo_2.gif
 recursive-include docs *.md *.json
 recursive-include examples *.json *.mjs *.txt
 recursive-include scripts *.py
+recursive-include scripts *.ps1
 recursive-include tests *.py *.mjs
-recursive-include toollery_dsh/assets *.mjs *.js *.json *.yaml *.txt
+recursive-include toollery_dsh/assets *.mjs *.js *.json *.yaml *.txt *.html
 prune work
 prune runs
 prune benchmark

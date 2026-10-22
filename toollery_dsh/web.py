@@ -51,6 +51,9 @@ def write_web_patch(path, config, base_url, home=None):
             {'id': 'toollery-ui', 'name': (ASSETS / 'dsh/ui/index.js').as_uri()},
         ]},
     ])
+    if config.get('_launcher_workspace'):
+        rows.append({'insert': [{'id': 'toollery-launcher-ui',
+                    'name': (ASSETS / 'dsh/launcher-ui/index.js').as_uri()}]})
     atomic_json(path, rows)
 
 
@@ -122,6 +125,10 @@ def run(args, output):
                     'TOOLLERY_BRIDGE_URL': bridge.url, 'TOOLLERY_BRIDGE_TOKEN': bridge.token,
                     'DSH_TOOLS_MODE': 'native', 'DSH_TELEMETRY_DISABLED': '1'})
         env.update(source_environment(config.get('tool_sources'), ROOT))
+        if config.get('_launcher_workspace'):
+            env.update(TOOLLERY_LAUNCHER_WORKSPACE=config['_launcher_workspace'],
+                       TOOLLERY_LAUNCHER_PRESET=config.get('preset_id', 'toollery-utilities'),
+                       TOOLLERY_LAUNCHER_ID=output.name)
         command = [*launch, '--profile', 'web', '--patch', str(patch), '--host', '127.0.0.1', '--port', str(args.port)]
         if args.no_open:
             command.append('--no-open')

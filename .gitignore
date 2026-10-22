@@ -16,3 +16,4 @@ benchmark/
 upstream/
 .pytest_cache/
 .DS_Store
+.toollery-launcher/

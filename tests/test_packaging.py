@@ -48,6 +48,8 @@ class PackagingTests(unittest.TestCase):
         for name in ('demo-tools.mjs', 'dsh/toollery.mjs', 'dsh/sources.mjs',
                      'dsh/web-controls.mjs', 'dsh/ui/index.js', 'dsh/ui/client.js',
                      'dsh/ui/package.json', 'dsh/web-runtime/package.json',
+                     'launcher.html', 'launcher.js', 'dsh/launcher-ui/package.json',
+                     'dsh/launcher-ui/index.js', 'dsh/launcher-ui/client.js',
                      'dsh/web-runtime/pnpm-lock.yaml', 'playground/welcome.txt'):
             with self.subTest(name=name):
                 self.assertTrue((ASSETS / name).is_file())
