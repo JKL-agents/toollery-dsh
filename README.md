@@ -112,7 +112,7 @@ On our **ToolRet development subset** (10,656 tools / 5,679 queries), Recall@3 w
 
 The **ToolTalk executable supplement** exposed a limitation: latest-query top-3 retrieval reduced tokens but missed tools needed by follow-ups and dependencies. Strict adapted turn success fell from 67/79 OFF to 51/79 ON. Token reduction does not imply equal quality or universal latency improvement. See the report for protocols and denominators.
 
-v0.1.0 uses lexical BM25 and the latest user text. There is no history-aware rewriting, dependency expansion or recovery search. The pool is frozen for an agent's lifetime; restart after tool changes. Implementation changes with an unchanged public schema cannot invalidate manuals automatically. Missing manuals fail preparation explicitly; there is no silent spec fallback. A larger k or OFF may suit tasks requiring broader access.
+v0.1.x uses lexical BM25 and the latest user text. There is no history-aware rewriting, dependency expansion or recovery search. The pool is frozen for an agent's lifetime; restart after tool changes. Implementation changes with an unchanged public schema cannot invalidate manuals automatically. Missing manuals fail preparation explicitly; there is no silent spec fallback. A larger k or OFF may suit tasks requiring broader access.
 
 ## Development and layout
 

@@ -45,5 +45,5 @@ jobs:
           }
       - uses: actions/upload-artifact@v4
         with:
-          name: toollery-dsh-0.1.0
+          name: toollery-dsh
           path: dist/*

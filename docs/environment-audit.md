@@ -1,6 +1,6 @@
 # Environment assumptions audit
 
-Checked on Windows, 2026-10-22. These changes are **unreleased**; the published v0.1.0 tag and assets remain unchanged.
+Checked on Windows, 2026-10-22. These changes ship in v0.1.1; the published v0.1.0 tag and assets remain unchanged.
 
 ## Findings and changes
 

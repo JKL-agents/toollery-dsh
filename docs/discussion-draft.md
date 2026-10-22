@@ -6,7 +6,7 @@ I'd like to share **Toollery for DSH**, an independent implementation of the [To
 
 **Repository:** [JKL-agents/toollery-dsh](https://github.com/JKL-agents/toollery-dsh)
 
-**Release:** [v0.1.0](https://github.com/JKL-agents/toollery-dsh/releases/tag/v0.1.0)
+**Release:** [v0.1.1](https://github.com/JKL-agents/toollery-dsh/releases/tag/v0.1.1)
 
 > Unofficial community project. Independently developed and maintained; not affiliated with or endorsed by DeepSeek or the original Toollery authors.
 
@@ -52,6 +52,6 @@ These are implementation experiments, rather than a reproduction of the paper’
 
 Based on *Toollery: Scaling LLM Agents to Thousands of Skills and Tools* by Xiangxi Tian and Ran Guan. Please see the [authors’ original repository](https://github.com/XiangxiTian/toollery).
 
-This integration was independently written, without reusing the original Toollery source code. The manual-generation prompt follows Appendix A.1 with attribution. Original project code is MIT-licensed.
+This integration was independently written, without reusing the original Toollery source code. The manual-generation prompt follows Appendix A.1 with attribution. This integration is released under the MIT License.
 
 Feedback on DSH integration, practical workloads, and tool-selection behavior is welcome!
