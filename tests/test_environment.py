@@ -176,4 +176,4 @@ class EnvironmentTests(unittest.TestCase):
             self.assertEqual(Path(proof['cwd']).resolve(), home.resolve())
             # load_config canonicalizes Windows 8.3 paths (for example RUNNER~1)
             # before setup builds its arguments. Compare the canonical target.
-            self.assertEqual(proof['args'], ['--dir', str((home / '.toollery/web-runtime').resolve()), 'install', '--frozen-lockfile', '--ignore-scripts'])
+            self.assertEqual(proof['args'], ['--dir', str((home / '.toollery/web-runtime').resolve()), 'install', '--frozen-lockfile', '--ignore-scripts', '--reporter=append-only'])
