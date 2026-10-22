@@ -174,4 +174,6 @@ class EnvironmentTests(unittest.TestCase):
                 self.assertEqual(cli.setup_web(home / 'toollery.json'), 0)
             proof = json.loads(record.read_text())
             self.assertEqual(Path(proof['cwd']).resolve(), home.resolve())
-            self.assertEqual(proof['args'], ['--dir', str(home / '.toollery/web-runtime'), 'install', '--frozen-lockfile', '--ignore-scripts'])
+            # load_config canonicalizes Windows 8.3 paths (for example RUNNER~1)
+            # before setup builds its arguments. Compare the canonical target.
+            self.assertEqual(proof['args'], ['--dir', str((home / '.toollery/web-runtime').resolve()), 'install', '--frozen-lockfile', '--ignore-scripts'])
