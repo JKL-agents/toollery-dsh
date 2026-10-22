@@ -21,7 +21,9 @@ The default is **ON / spec_manual / top_k / k=3**. OFF gives DSH the full origin
 
 **Requires Windows x64, a writable folder and internet access.** Python, Node.js, pnpm and DSH are installed privately; no administrator rights or preinstalled development tools are needed.
 
-**[Download the v0.1.2 ZIP](https://github.com/JKL-agents/toollery-dsh/archive/refs/tags/v0.1.2.zip).** Extract it to use the double-click launcher. The older v0.1.1 downloads do not include it.
+**[Download the latest release](https://github.com/JKL-agents/toollery-dsh/releases/latest)** and select **Source code (zip)**. Extract it to use the double-click launcher. This link always opens the latest published release.
+
+For fixes not yet included in a release, download the [development ZIP from main](https://github.com/JKL-agents/toollery-dsh/archive/refs/heads/main.zip). It may contain unreleased changes.
 
 1. Extract the ZIP, open the extracted repository folder, and double-click **`Start-Toollery.cmd`**. Run it from the extracted folder, not inside the ZIP.
 2. Keep the terminal open while dependencies install. First use may take several minutes; the browser setup page opens when installation finishes. If it does not open, copy the full **`Toollery setup:`** URL printed in the terminal into your browser.

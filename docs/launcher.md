@@ -1,6 +1,6 @@
 # Windows launcher
 
-The double-click launcher is included in **v0.1.2**. [Download the v0.1.2 ZIP](https://github.com/JKL-agents/toollery-dsh/archive/refs/tags/v0.1.2.zip) and extract it before starting. Existing v0.1.1 release assets remain unchanged.
+[Open the latest release](https://github.com/JKL-agents/toollery-dsh/releases/latest), select **Source code (zip)**, and extract it before starting. The launcher is available in v0.1.2 and later. For unreleased fixes, use the [development ZIP from main](https://github.com/JKL-agents/toollery-dsh/archive/refs/heads/main.zip).
 
 This launcher creates a standalone demo with its own DSH environment. It does not install a bundle into an existing DSH profile or certify compatibility with that profile's other plugins. Existing-host support currently uses the opt-in wrapper described in [integration](integration.md).
 
