@@ -15,7 +15,49 @@ This project implements an existing method, not an original algorithm. It is not
 
 The default is **ON / spec_manual / top_k / k=3**. OFF gives DSH the full original tool pool and bypasses retrieval. `all` retains every tool but can still rank them using the selected representation.
 
-## DSH Web UI demos
+## Install and try it
+
+### Windows: free preview, no API key
+
+**Requires Windows x64, a writable folder and internet access.** Python, Node.js, pnpm and DSH are installed privately; no administrator rights or preinstalled development tools are needed.
+
+**[Download the main-branch ZIP](https://github.com/JKL-agents/toollery-dsh/archive/refs/heads/main.zip).** The v0.1.1 release downloads do **not** contain the double-click launcher.
+
+1. Extract the ZIP, open the extracted repository folder, and double-click **`Start-Toollery.cmd`**. Run it from the extracted folder, not inside the ZIP.
+2. Keep the terminal open while dependencies install. First use may take several minutes; the browser setup page opens when installation finishes. If it does not open, copy the full **`Toollery setup:`** URL printed in the terminal into your browser.
+3. Select **12 utility tools**, check **Scripted preview — no API key or charges**, and leave retrieval at **ON / Spec + manual / top-k / k=3**. No API credentials are required.
+4. Select **Start demo** and wait for the DSH page to open. If the new tab is blocked, select **Open DSH demo** on the setup page. Accept DSH's first-run notice if shown; use the workspace picker if the workspace does not open automatically.
+5. Send this prompt:
+
+   ```text
+   Use add_numbers to add 19 and 23.
+   ```
+
+You should see `add_numbers` called and the result **42**. Change k or switch Toollery OFF, then repeat the prompt to compare selected tools. Another supported prompt is `Use celsius_to_fahrenheit to convert 20 Celsius.`
+
+This free preview executes real DSH tools with a scripted model and mock manuals. It supports the example requests, not arbitrary chat, and makes no paid API requests.
+
+The launcher creates a **standalone demo with its own DSH environment**. It is not yet a bundle installable through an existing DSH's Plugins page. See [integration](docs/integration.md) for the current opt-in wrapper approach to an existing host.
+
+### Use your own chat and manual-generation models
+
+1. On the setup page, stop any running demo and uncheck **Scripted preview**. Start with **12 utility tools**; the filesystem and custom pools are described in the [launcher guide](docs/launcher.md).
+2. Enter your chat model, API base URL and key. Chat requires a DSH-compatible DeepSeek Messages API. The defaults are `deepseek-flash` and `https://api.deepseek.com/anthropic`.
+3. Manual generation uses an OpenAI Chat Completions-compatible API, defaulting to `deepseek-flash` and `https://api.deepseek.com`. Expand **Separate manual-generation model or key** to use a different provider, model or key. Initially, the chat key is reused unless you supply a separate manual key.
+4. For first real use with Toollery ON, check **Allow API calls to generate missing or stale manuals**, then select **Start demo**. Preparation finishes before the DSH chat opens.
+
+**There are two separate sources of API usage:** generating missing or stale manuals during preparation, and calling the chat model during conversations. Valid cached manuals are reused on later starts. Scripted-preview manuals are isolated and do not replace real manuals. OFF bypasses manual preparation; turning ON later requires a valid cache or generation permission.
+
+Credentials are saved locally in `.toollery-launcher/workspace/.env`. Blank key fields retain previously saved keys. For separate credentials, removal of saved keys and custom configurations, see the [launcher guide](docs/launcher.md#real-models-and-manual-generation).
+
+### Stop, restart and troubleshoot
+
+- **Stop:** select **Stop demo** on the setup page; press Ctrl+C in the terminal to close the launcher too. Closing a browser tab alone does not stop the processes.
+- **Next time:** double-click the same **`Start-Toollery.cmd`** again. Dependencies, settings and valid manuals are reused. Each demo start creates a fresh DSH session; chat history is not resumed.
+- **Ports:** DSH defaults to **3080** and uses a free localhost port if busy. Use the opened or displayed authenticated URL; the setup page has a separate port.
+- **Installation failed:** check the terminal message and retry. First use needs access to GitHub, nodejs.org, PyPI and the npm registry. See [launcher troubleshooting](docs/launcher.md#script-options-and-troubleshooting) for blocked scripts and download failures.
+
+### DSH Web UI demos
 
 **Change k and try a different prompt.** Start with an addition request at k=3, then change k to 5 and ask for a temperature conversion. Each turn shows the retrieved candidates and actual tool calls.
 
@@ -27,35 +69,21 @@ The default is **ON / spec_manual / top_k / k=3**. OFF gives DSH the full origin
 
 Both recordings use the bundled 12-tool demo. Settings apply to the next turn; they do not change a turn already in progress.
 
-## Requirements
+## Manual installation
 
-For the Windows double-click launcher below, Python, Node.js and pnpm are installed privately. The following prerequisites apply to manual installation.
+### Prerequisites
+
+The Windows double-click launcher above installs its own dependencies. For manual installation, prepare:
 
 - Python 3.12 or later; Python 3.12.7 was tested on Windows.
 - Node.js 22.19+ on the 22.x line, or 24+, for Web and the filesystem preset. Node 23 is unsupported. pnpm 11.x is required to install the pinned Web/MCP runtime, but not to run it afterward. Node 24.19 / pnpm 11.25 were tested.
-- A chat API compatible with DSH's configured DeepSeek Messages provider, and an OpenAI Chat Completions-compatible API for manuals. Defaults use `deepseek-flash` for both; these settings are independent.
+- For real model use, a chat API compatible with DSH's configured DeepSeek Messages provider, and an OpenAI Chat Completions-compatible API for manuals. Defaults use `deepseek-flash` for both; these settings are independent.
 
 DSH is pinned to Python `0.2.1rc2` / npm `0.2.1-rc.2`. Windows is verified; Linux and macOS are not yet verified. Distribution is through GitHub, not npm or PyPI.
 
 Install [Python](https://www.python.org/downloads/), [Node.js](https://nodejs.org/en/download) and [pnpm](https://pnpm.io/installation) as needed. After installation, reopen PowerShell and check `node --version` and `pnpm --version` **in the terminal you will use to launch Web**. An IDE or coding agent may have its own tools on PATH; that does not make them available in a normal terminal. The bundled terminal demo uses the Python SDK runtime and does not require a separate Node/pnpm installation. Configured MCP servers may require additional executables.
 
-## Install and try it
-
-### Windows: double-click setup
-
-Available on **main**; the v0.1.1 release archives predate this launcher.
-
-This is a standalone demo setup: it installs a private DSH environment without changing an existing installation. It is not yet a bundle installable through DSH's Plugins page. For the current wrapper-based path to an existing host, see [integration](docs/integration.md).
-
-1. Download and extract [the main-branch ZIP](https://github.com/JKL-agents/toollery-dsh/archive/refs/heads/main.zip), or clone this repository.
-2. Double-click **`Start-Toollery.cmd`**. First use downloads private Python 3.12.12, Node.js 22.19.0, pnpm 11.25.0 and DSH dependencies. No global installation or administrator rights are needed.
-3. In the browser setup page, choose a tool pool, ON/OFF, retrieval mode and k. Enter API settings and allow missing-manual generation for first real use, then select **Start demo**.
-
-For a free scripted preview, select **Scripted preview** with the utility pool and try `Use add_numbers to add 19 and 23.` It exercises real DSH/tool execution with a scripted model and mock manuals; it is not arbitrary chat.
-
-The launcher opens the authenticated DSH page and enters a demo workspace. If the browser blocks the new tab, use **Open DSH demo**. Stop with **Stop demo**, or Ctrl+C in the terminal. Cached manuals and settings survive restarts. [Launcher guide](docs/launcher.md) covers separate model keys, filesystem tools, local files and troubleshooting.
-
-### Manual installation
+### Terminal setup
 
 These commands use PowerShell. Activation is optional; use the environment's executables directly if activation is restricted.
 

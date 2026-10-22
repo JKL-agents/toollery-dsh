@@ -5,6 +5,7 @@
 - Add Windows x64 double-click installation with private Python, Node.js and pnpm; no preconfigured PATH required.
 - Add a local browser setup page for tool pools, retrieval settings, independent model credentials, explicit manual generation and a free scripted preview.
 - Open an authenticated DSH demo workspace, retain manuals across restarts, choose a free port when busy, and stop the owned process tree.
+- Reorganize the README around a no-key preview, real-model setup, restart instructions and optional manual installation.
 
 ## 0.1.1
 
