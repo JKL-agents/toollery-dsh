@@ -1,0 +1,11 @@
+include LICENSE ACKNOWLEDGEMENTS.md CHANGELOG.md .env.example
+recursive-include docs *.md *.json
+recursive-include examples *.json *.mjs *.txt
+recursive-include scripts *.py
+recursive-include tests *.py *.mjs
+recursive-include toollery_dsh/assets *.mjs *.js *.json *.yaml *.txt
+prune work
+prune runs
+prune benchmark
+prune upstream
+global-exclude __pycache__ *.py[cod] .env

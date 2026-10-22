@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "toollery-dsh"
+version = "0.1.0"
+description = "Independent Toollery retrieval integration for DeepSeek Harness"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE", "ACKNOWLEDGEMENTS.md"]
+authors = [{name = "Jikun Liu"}]
+dependencies = ["deepseek-harness-sdk==0.2.1rc2", "deepseek-harness-runtime-bin==0.2.1rc2"]
+
+[project.optional-dependencies]
+benchmark = ["pyarrow==26.0.0", "tiktoken>=0.8,<1", "psutil>=6,<8"]
+dev = ["build>=1.2", "twine>=6"]
+
+[project.scripts]
+toollery-dsh = "toollery_dsh.cli:main"
+
+[project.urls]
+Repository = "https://github.com/JKL-agents/toollery-dsh"
+Issues = "https://github.com/JKL-agents/toollery-dsh/issues"
+
+[tool.setuptools]
+include-package-data = false
+
+[tool.setuptools.packages.find]
+include = ["toollery", "toollery.*", "toollery_dsh"]
+namespaces = false
+
+[tool.setuptools.package-data]
+toollery_dsh = ["assets/*", "assets/dsh/*", "assets/dsh/ui/*", "assets/dsh/web-runtime/*", "assets/playground/*"]

@@ -1,0 +1,3 @@
+Welcome to the Toollery filesystem playground.
+Project: Toollery + DSH
+Today's exercise: read this file, create a note, then find it again.

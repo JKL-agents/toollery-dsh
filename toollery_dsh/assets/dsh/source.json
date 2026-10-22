@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/deepseek-ai/deepseek-harness.git",
+  "tag": "dsh-v0.2.1-rc.2",
+  "commit": "687f282e8625c6b8d11ff58211a90524be2e4317",
+  "sdk_version": "0.2.1rc2",
+  "runtime_version": "0.2.1rc2",
+  "profile": "sdk-minimal",
+  "upstream_modified": false,
+  "integration": "external Cordis plugin and Python localhost bridge",
+  "tool_scope_contract": "per_user_turn_v1; persistent history with per-turn availability context and historical-result policy",
+  "tool_update_projection": "Declare complete current subset per request; model catalog omits toolUpdate to avoid all-deferred API 400 on disjoint subsets."
+}

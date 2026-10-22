@@ -1,0 +1,24 @@
+{
+  "model": "deepseek-flash",
+  "base_url": "https://api.deepseek.com/anthropic",
+  "api_key_env": "TOOLLERY_CHAT_API_KEY",
+  "max_tokens": 4096,
+  "request_timeout_seconds": 180,
+  "generator_config": "../generator.command.json",
+  "cache_dir": ".toollery/cache",
+  "dsh_home": ".toollery/dsh-cli",
+  "web_home": ".toollery/dsh-web",
+  "state_dir": ".toollery/ui-state",
+  "representation": "spec_manual",
+  "budget": "top_k",
+  "k": 3,
+  "preset_id": "toollery-filesystem",
+  "persona": "You are a helpful assistant using real filesystem tools. Use an available tool to inspect or change files when requested. Stay within the configured allowed directory. If the current selection cannot perform an action, explain that limitation. Do not invent tool names.",
+  "tool_sources": [
+    {
+      "id": "filesystem",
+      "type": "filesystem",
+      "root": "playground"
+    }
+  ]
+}

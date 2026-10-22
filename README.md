@@ -1,15 +1,127 @@
 # Toollery for DeepSeek Harness
 
-An independent, community-maintained implementation of **Toollery** for **DeepSeek Harness (DSH)**, enabling scalable, training-free skill and tool retrieval.
+An independent implementation of [Toollery](https://arxiv.org/abs/2609.22218) for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness). Generate three proxy queries per tool, cache them locally, and retrieve a smaller tool set for each user turn.
 
-This project implements the methodology introduced in [*Toollery: Scaling LLM Agents to Thousands of Skills and Tools*](https://arxiv.org/abs/2609.22218) by Xiangxi Tian and Ran Guan (2026).
+This project implements an existing method, not an original algorithm. It is not affiliated with or endorsed by the Toollery authors or the DSH team. Original repository: [XiangxiTian/toollery](https://github.com/XiangxiTian/toollery). The manual-generation prompt follows Appendix A.1; see [Acknowledgements](ACKNOWLEDGEMENTS.md).
 
-**Project Scope:** This repository provides an independent implementation and integration of the existing Toollery methodology into the DSH plugin ecosystem. It does not introduce or claim authorship of the original Toollery algorithm.
+## What it does
 
-**Original Implementation:** [XiangxiTian/toollery](https://github.com/XiangxiTian/toollery)
+- Discovers the complete tool pool visible to a DSH agent after configured sources finish loading.
+- Validates cached manuals and generates missing or changed entries when explicitly requested.
+- Searches `spec`, `manual`, or `spec_manual` with local BM25.
+- Sends selected tools' **original schemas** to the chat model. Manuals stay in the local search index.
+- Provides an ON/OFF switch, retrieval settings and per-turn selected/called tool cards in the official DSH Web UI.
+- Supports the bundled 12-tool demo, a filesystem MCP preset, and configured MCP or Cordis sources.
 
-**Disclaimer:** This is an unofficial community project and is not affiliated with or endorsed by the original Toollery authors or the DeepSeek Harness team.
+The default is **ON / spec_manual / top_k / k=3**. OFF gives DSH the full original tool pool and bypasses retrieval. `all` retains every tool but can still rank them using the selected representation.
+
+## Requirements
+
+- Python 3.12 or later; Python 3.12.7 was tested on Windows.
+- Node.js 22.19+ or 24+ and pnpm 11 for Web/MCP. Node 24.19 / pnpm 11.25 were tested.
+- A chat API compatible with DSH's configured DeepSeek Messages provider, and an OpenAI Chat Completions-compatible API for manuals. Defaults use `deepseek-flash` for both; these settings are independent.
+
+DSH is pinned to Python `0.2.1rc2` / npm `0.2.1-rc.2`. Windows is verified; Linux and macOS are not yet verified. Distribution is through GitHub, not npm or PyPI.
+
+## Install and try it
+
+These commands use PowerShell. Activation is optional; use the environment's executables directly if activation is restricted.
+
+```powershell
+git clone https://github.com/JKL-agents/toollery-dsh.git
+cd toollery-dsh
+py -3.12 -m venv .venv
+& .venv/Scripts/python.exe -m pip install .
+& .venv/Scripts/toollery-dsh.exe init my-workspace
+& .venv/Scripts/toollery-dsh.exe doctor --config my-workspace/toollery.json
+```
+
+Verify the real DSH bridge with a scripted model and mock manuals, without API credentials or charges:
+
+```powershell
+& .venv/Scripts/toollery-dsh.exe chat --config my-workspace/toollery.json --offline-smoke
+```
+
+For real use, copy the template, fill credentials locally, and prepare manuals:
+
+```powershell
+Copy-Item my-workspace/.env.example my-workspace/.env
+# Edit my-workspace/.env: set TOOLLERY_API_KEY, or separate chat/manual keys.
+& .venv/Scripts/toollery-dsh.exe prepare --config my-workspace/toollery.json
+& .venv/Scripts/toollery-dsh.exe chat --config my-workspace/toollery.json
+```
+
+`prepare` makes paid API calls for missing/stale manuals. Normal `chat`/`web` startup only reads the manual cache; chatting still uses your paid chat API. `--generate-manuals` explicitly permits startup generation. Existing valid entries are reused.
+
+## Official Web UI
+
+```powershell
+& .venv/Scripts/toollery-dsh.exe setup-web --config my-workspace/toollery.json
+& .venv/Scripts/toollery-dsh.exe doctor --config my-workspace/toollery.json --require-web
+& .venv/Scripts/toollery-dsh.exe web --config my-workspace/toollery.json --port 3080
+```
+
+Open the printed localhost URL, select a workspace, and start a conversation. The composer shows the switch and retrieval controls. Changes apply to the next turn; a turn's subset stays fixed through its tool calls. Cards show the full pool, selected tools and actual calls. Stop with Ctrl+C. The launcher binds to `127.0.0.1`.
+
+Try “Please use the matching tool to add 19 and 23,” then “Convert 20 degrees Celsius to Fahrenheit using a tool.” Change k or switch OFF to inspect tool availability. These examples are not benchmark evidence.
+
+Web commands: `/toollery status`, `/toollery on`, `/toollery off`, `/toollery mode spec_manual`, `/toollery budget top_k`, `/toollery k 3`. Terminal equivalents: `/on`, `/off`, `/mode`, `/budget`, `/k`, `/tools`, `/quit`.
+
+## Real filesystem tools
+
+```powershell
+& .venv/Scripts/toollery-dsh.exe init filesystem-demo --preset filesystem
+& .venv/Scripts/toollery-dsh.exe setup-web --config filesystem-demo/toollery.json
+Copy-Item filesystem-demo/.env.example filesystem-demo/.env
+# Fill credentials locally.
+& .venv/Scripts/toollery-dsh.exe prepare --config filesystem-demo/toollery.json
+& .venv/Scripts/toollery-dsh.exe web --config filesystem-demo/toollery.json
+```
+
+The allowed directory is `filesystem-demo/playground`, created by `init`. Ask the assistant to read its `welcome.txt`, using the absolute path if needed. Change `tool_sources[0].root` to select another allowed directory. Filesystem operations execute for real within that directory.
+
+## Configuration and integration
+
+`init` creates JSON configuration, `.env.example` and `.gitignore` without overwriting files. Paths resolve against the config directory. Chat/manual generation may use different models, endpoints and keys.
+
+- [Configuration and cache](docs/configuration.md)
+- [Tool sources and existing DSH integration](docs/integration.md)
+- [Troubleshooting](docs/troubleshooting.md)
+- [Changelog](CHANGELOG.md) and [maintainer publishing checklist](docs/publishing.md)
+
+## Evidence and limitations
+
+- [Verification summary](docs/verification.md): installation, DSH integration and Web UI checks.
+- [Experiment summary](docs/experiments/README.md): ToolRet retrieval gains, ToolTalk execution tradeoffs and preparation cost.
+
+On our **ToolRet development subset** (10,656 tools / 5,679 queries), Recall@3 was 32.52% with specs and 37.23% with spec+manual; Recall@10 was 42.00% and 48.48%. This is documented subset evaluation, not reproduction of the paper's experiments.
+
+The **ToolTalk executable supplement** exposed a limitation: latest-query top-3 retrieval reduced tokens but missed tools needed by follow-ups and dependencies. Strict adapted turn success fell from 67/79 OFF to 51/79 ON. Token reduction does not imply equal quality or universal latency improvement. See the report for protocols and denominators.
+
+v0.1.0 uses lexical BM25 and the latest user text. There is no history-aware rewriting, dependency expansion or recovery search. The pool is frozen for an agent's lifetime; restart after tool changes. Implementation changes with an unchanged public schema cannot invalidate manuals automatically. Missing manuals fail preparation explicitly; there is no silent spec fallback. A larger k or OFF may suit tasks requiring broader access.
+
+## Development and layout
+
+```text
+toollery/             Preparation, cache, retrieval and metrics
+  adapters/dsh.py     Authenticated localhost bridge
+toollery_dsh/         Installable CLI, configuration and launchers
+  assets/            Cordis plugins, UI and pinned runtime manifests
+examples/            Source-checkout configuration examples
+scripts/             Optional benchmark and verification drivers
+tests/               Offline unit, transport and plugin tests
+docs/                User guides, experiment evidence and release drafts
+```
+
+```powershell
+& .venv/Scripts/python.exe -m pip install -e '.[dev]'
+& .venv/Scripts/python.exe -m unittest discover -s tests -v
+node --test tests/test_dsh_snapshot.mjs tests/test_dsh_sources.mjs tests/test_dsh_ui.mjs
+& .venv/Scripts/python.exe -m build
+```
+
+Optional experiments need `.[benchmark]` and separately downloaded data. Dataset dumps, benchmark manuals, local credentials, environments and historical run logs are not distributed.
 
 ## License
 
-This project's original code is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+MIT for original code, copyright 2026 Jikun Liu. Third-party material retains its own terms; see [LICENSE](LICENSE) and [ACKNOWLEDGEMENTS.md](ACKNOWLEDGEMENTS.md).

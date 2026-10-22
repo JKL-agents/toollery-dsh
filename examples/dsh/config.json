@@ -1,0 +1,15 @@
+{
+  "model": "deepseek-flash",
+  "base_url": "https://api.deepseek.com/anthropic",
+  "api_key_env": "TOOLLERY_CHAT_API_KEY",
+  "max_tokens": 4096,
+  "request_timeout_seconds": 180,
+  "generator_config": "../generator.command.json",
+  "cache_dir": ".toollery/cache",
+  "dsh_home": ".toollery/dsh-cli",
+  "web_home": ".toollery/dsh-web",
+  "state_dir": ".toollery/ui-state",
+  "representation": "spec_manual",
+  "budget": "top_k",
+  "k": 3
+}

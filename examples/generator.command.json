@@ -1,0 +1,18 @@
+{
+  "provider": "command",
+  "command": [
+    "{python}",
+    "-m",
+    "toollery_dsh.provider_bridge"
+  ],
+  "model": "deepseek-flash",
+  "parameters": {
+    "api_url": "https://api.deepseek.com",
+    "api_key_env": "TOOLLERY_MANUAL_API_KEY",
+    "temperature": 0,
+    "timeout_seconds": 120,
+    "retries": 2
+  },
+  "bridge_version": "openai-compatible-v1-paper-a1",
+  "timeout_seconds": 400
+}
