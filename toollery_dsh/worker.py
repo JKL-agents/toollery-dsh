@@ -622,7 +622,7 @@ class WorkerBridge(DSHBridge):
         # contains a Python module with the same name or inherits PYTHONPATH.
         # Preserve the generation contract and explicitly configured custom commands.
         if command == [sys.executable, '-m', 'toollery_dsh.provider_bridge']:
-            command = [sys.executable, '-I', *command[1:]]
+            command = [sys.executable, '-E', '-I', *command[1:]]
             value = read_json(self.home / 'manual-generator.json')
             key = manual_key(self.home, value)
             if key:
@@ -632,13 +632,8 @@ class WorkerBridge(DSHBridge):
                 # PYTHONHOME while initializing the runtime.  A hostile or
                 # stale value can make the child exit before provider_bridge
                 # reads stdin, yielding an opaque bridge_error and no request.
-                env = dict(os.environ)
-                for name in (
-                    'PYTHONHOME', 'PYTHONPATH', 'PYTHONPLATLIBDIR',
-                    'PYTHONUSERBASE', 'PYTHONNOUSERSITE',
-                    'PYTHONPYCACHEPREFIX', 'PYTHONWARNINGS',
-                ):
-                    env.pop(name, None)
+                env = {name: value for name, value in os.environ.items()
+                       if not name.upper().startswith('PYTHON')}
                 env[value.get('parameters', {}).get('api_key_env', 'TOOLLERY_MANUAL_API_KEY')] = key
                 options['env'] = env
         # Own direct generator children so unloading the plugin cannot leave
