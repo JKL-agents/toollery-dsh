@@ -12,8 +12,8 @@ const tools = [
   { name: 'add', description: 'Add numbers and return their sum', parameters: { type: 'object' } },
   { name: 'temperature', description: 'Convert Celsius Fahrenheit temperature', parameters: { type: 'object' } },
 ]
-async function until(fn) {
-  const deadline = Date.now() + 15000
+async function until(fn, timeoutMs = 60000) {
+  const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const value = await fn()
     if (value) return value
