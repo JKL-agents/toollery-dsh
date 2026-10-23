@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 - 2026-10-23
+
+- Fix Windows built-in provider detection by using the configured provider bridge instead of executable-path string equality.
+- Keep the provider bridge isolated from checkout paths and unrelated Python environments.
+- Publish the DSH bundle as `@jkl-agents/dsh-toollery` for direct installation from DSH Desktop.
+- Clarify npm, pinned GitHub asset, CLI and standalone demo installation paths.
+
 ## 0.2.0 - 2026-10-23
 
 - Add an official-format DSH bundle for existing profiles, with a plugin-owned Python worker and shared retrieval core.

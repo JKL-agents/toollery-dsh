@@ -2,7 +2,7 @@
 
 ## Final hot-fix regression (local, 2026-10-23)
 
-The current v0.2.0 candidate passed **68 Python tests with 3 optional ToolTalk skips** (71 total) and **16 Node tests**. No paid API calls were made. These totals supersede the earlier baseline counts below.
+The current v0.2.1 candidate passed **68 Python tests with 3 optional ToolTalk skips** (71 total) and **16 Node tests**. No paid API calls were made. These totals supersede the earlier baseline counts below.
 
 | Check | Result and meaning |
 | --- | --- |

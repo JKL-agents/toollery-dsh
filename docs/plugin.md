@@ -6,9 +6,21 @@ The v0.2 plugin is an official-format DSH bundle. The standalone Windows launche
 
 The local target is **DSH Desktop 0.12.1**, with a working chat model and **native tool presentation** (Standard preset); its DSH runtime is pinned separately to **0.2.1-rc.2**. Desktop supplies Node and its package manager for plugin installation; no separate terminal or Node/pnpm installation is required. The plugin does not copy or change the chat model's credentials. The Desktop GUI onboarding path remains unverified; see [verification](verification.md).
 
-Download `jkl-agents-dsh-toollery-0.2.0.tgz` from the [v0.2.0 GitHub release](https://github.com/JKL-agents/toollery-dsh/releases/tag/v0.2.0).
+### Recommended: install by package name
 
-1. Open **Plugins → Add plugin → Install a third-party plugin**. Enter the downloaded bundle's **absolute path**, such as `C:\Users\you\Downloads\jkl-agents-dsh-toollery-0.2.0.tgz`, or its release asset URL. Install, enable and restart if requested.
+Open **Plugins → Add plugin → Install a third-party plugin** and enter:
+
+```text
+@jkl-agents/dsh-toollery
+```
+
+DSH uses its configured npm registry and installs the published plugin bundle. This is the normal Desktop path and does not require a terminal, a downloaded archive or a second DSH installation. The package name is the stable installation identifier.
+
+### Pinned or offline install
+
+Download the matching `.tgz` asset from the [latest GitHub release](https://github.com/JKL-agents/toollery-dsh/releases/latest). Enter its release URL or downloaded file's **absolute path** in the same dialog.
+
+1. Open **Plugins → Add plugin → Install a third-party plugin**. Enter the downloaded bundle's **absolute path**, such as `C:\Users\you\Downloads\jkl-agents-dsh-toollery-0.2.1.tgz`, or its release asset URL. Install, enable and restart if requested.
 2. Open Toollery's plugin details. Select **Set up local worker**. Windows x64 users without Python can first check **Allow private Python download if needed**. The status shows setup stages; the first runtime download may take several minutes. No model calls occur during setup.
 3. In **Manual-generation model**, save your model, OpenAI Chat Completions-compatible API base URL and key. Defaults are `deepseek-flash` and `https://api.deepseek.com`. Saving checks cache readiness without generating manuals.
 4. Start a **new native conversation**. Its Toollery panel shows the full pool and valid/missing manual counts. If DSH is still showing its new-chat landing page, send a harmless greeting to create the session; Toollery remains OFF until ready, and that greeting uses your normal chat API. Check the API/charges confirmation, then select **Generate missing manuals (uses API)**. Tool specifications are sent to the chosen manual provider. Three proxy queries are generated per tool; retries can add requests. Progress is shown while preparation runs.
@@ -21,11 +33,13 @@ No `.env` editing or standalone launcher is required. Chat remains usable with T
 In a terminal using your existing CLI installation:
 
 ```powershell
-dsh plugin --profile web add C:/absolute/path/jkl-agents-dsh-toollery-0.2.0.tgz
+dsh plugin --profile web add @jkl-agents/dsh-toollery
 dsh --profile web
 ```
 
-Replace `web` with your existing CLI profile name. Desktop uses an application-owned profile; `--profile desktop` does not select it. Use the normal authenticated DSH URL and workspace/model configuration. Nothing is published to npm, and the bundle has no npm lifecycle/build scripts. The CLI requires its supported Node (22.19+ on 22.x, or 24+) and pnpm environment; Desktop supplies its own.
+For a pinned offline CLI install, replace the package name with the downloaded `.tgz` path.
+
+Replace `web` with your existing CLI profile name. Desktop uses an application-owned profile; `--profile desktop` does not select it. Use the normal authenticated DSH URL and workspace/model configuration. The bundle has no npm lifecycle/build scripts; DSH's package manager installs it from npm. The CLI requires its supported Node (22.19+ on 22.x, or 24+) and pnpm environment; Desktop supplies its own.
 
 On DSH Desktop, setup first uses the Desktop-injected absolute path to its installation-owned `office-runtime/primary-runtime` Python. Toollery creates a profile-local venv with that interpreter and installs the embedded worker wheel offline; Desktop's runtime intentionally omits `ensurepip`, so this path uses the bundled pip with `venv --without-pip` and never writes into the Desktop installation. If that payload is unavailable, setup tries version-checked `py -3.12`, `py -3`, then `python` on Windows; Unix uses `python3`, then `python`. Existing Python must be 3.12+ with venv/pip. Alternatively set an absolute `TOOLLERY_PYTHON` path before starting DSH. `/toollery setup` uses existing Python only; private-runtime download consent is provided through the UI.
 
@@ -145,4 +159,4 @@ python -m pip install '.[dev]'
 python scripts/build_plugin.py --build-wheel
 ```
 
-This stages shared JavaScript/UI assets and the worker wheel under `build/plugin`, then emits `dist/jkl-agents-dsh-toollery-0.2.0.tgz`. Generated copies are not maintained as separate source implementations.
+This stages shared JavaScript/UI assets and the worker wheel under `build/plugin`, then emits `dist/jkl-agents-dsh-toollery-<version>.tgz`. The same generated package is published to npm as `@jkl-agents/dsh-toollery`; generated copies are not maintained as separate source implementations.

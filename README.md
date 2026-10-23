@@ -19,11 +19,17 @@ After preparation, the default is **ON / spec_manual / top_k / k=3**. OFF bypass
 
 ### Plugin for your existing DSH
 
-v0.2 adds an installable DSH bundle. It uses your existing profile, chat model and registered tools; no second DSH installation is needed. The local target is **DSH Desktop 0.12.1**, with a working chat model and native tool presentation (Standard preset). The DSH runtime is pinned separately to **0.2.1-rc.2**.
+The v0.2 plugin uses your existing DSH Desktop profile, chat model and registered tools; no second DSH installation is needed. The local target is **DSH Desktop 0.12.1**, with a working chat model and native tool presentation (Standard preset). The DSH runtime is pinned separately to **0.2.1-rc.2**.
 
-Download `jkl-agents-dsh-toollery-0.2.0.tgz` from the [v0.2.0 GitHub release](https://github.com/JKL-agents/toollery-dsh/releases/tag/v0.2.0).
+In DSH Desktop, open **Plugins → Add plugin** and enter the npm package name:
 
-1. In Desktop, open **Plugins → Add plugin → Install a third-party plugin**. Paste the downloaded file's **absolute path** (or a release asset URL), install, enable it, and restart if DSH requests it. Desktop supplies its own Node/package manager.
+```text
+@jkl-agents/dsh-toollery
+```
+
+DSH resolves and installs the current npm release. If you prefer a pinned or offline install, download the matching `.tgz` asset from the [latest GitHub release](https://github.com/JKL-agents/toollery-dsh/releases/latest), or use the CLI command shown in the [plugin guide](docs/plugin.md).
+
+1. If you are using the npm path above, DSH shows the package inspection result and installs it from the configured registry. For a pinned/offline archive, open **Plugins → Add plugin → Install a third-party plugin**, paste the downloaded file's **absolute path** (or a release asset URL), install, enable it, and restart if DSH requests it. Desktop supplies its own Node/package manager.
 2. Open Toollery's plugin details. Select **Set up local worker**. If Python 3.12+ is unavailable, Windows x64 users can allow a **private Python download** first. This does not install another DSH or call a model.
 3. In **Manual-generation model**, enter the model, OpenAI-compatible API base URL and key, then save. These settings are independent of DSH's chat model. The key stays in local profile storage and is not returned to the form.
 4. Start a **new native conversation**. Review its tool count and missing-manual count, allow generation charges, then select **Generate missing manuals (uses API)**. Each tool gets three proxy queries; valid cached entries are reused.
@@ -99,7 +105,7 @@ The Windows double-click launcher above installs its own dependencies. For manua
 - Node.js 22.19+ on the 22.x line, or 24+, for Web and the filesystem preset. Node 23 is unsupported. pnpm 11.x is required to install the pinned Web/MCP runtime, but not to run it afterward. Node 24.19 / pnpm 11.25 were tested.
 - For real model use, a chat API compatible with DSH's configured DeepSeek Messages provider, and an OpenAI Chat Completions-compatible API for manuals. Defaults use `deepseek-flash` for both; these settings are independent.
 
-DSH is pinned to Python `0.2.1rc2` / npm `0.2.1-rc.2`. Windows is verified; Linux and macOS are not yet verified. Distribution is through GitHub, not npm or PyPI.
+DSH is pinned to Python `0.2.1rc2` / npm `0.2.1-rc.2`. Windows is verified; Linux and macOS are not yet verified. The DSH plugin is distributed through npm and GitHub releases; the Python package is not published to PyPI.
 
 Install [Python](https://www.python.org/downloads/), [Node.js](https://nodejs.org/en/download) and [pnpm](https://pnpm.io/installation) as needed. After installation, reopen PowerShell and check `node --version` and `pnpm --version` **in the terminal you will use to launch Web**. An IDE or coding agent may have its own tools on PATH; that does not make them available in a normal terminal. The bundled terminal demo uses the Python SDK runtime and does not require a separate Node/pnpm installation. Configured MCP servers may require additional executables.
 
