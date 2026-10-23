@@ -621,17 +621,12 @@ class WorkerBridge(DSHBridge):
         # The built-in bridge must use this installed worker, even if the profile
         # contains a Python module with the same name or inherits PYTHONPATH.
         # Preserve the generation contract and explicitly configured custom commands.
-        builtin_bridge = False
-        if (isinstance(command, list) and len(command) == 3
-                and command[1:] == ['-m', 'toollery_dsh.provider_bridge']):
-            try:
-                builtin_bridge = os.path.samefile(command[0], sys.executable)
-            except (OSError, ValueError):
-                builtin_bridge = (os.path.normcase(os.path.realpath(command[0]))
-                                  == os.path.normcase(os.path.realpath(sys.executable)))
+        value = read_json(self.home / 'manual-generator.json')
+        builtin_bridge = (builtin(value)
+                          and isinstance(command, list) and len(command) == 3
+                          and command[1:] == ['-m', 'toollery_dsh.provider_bridge'])
         if builtin_bridge:
             command = [sys.executable, '-E', '-I', *command[1:]]
-            value = read_json(self.home / 'manual-generator.json')
             key = manual_key(self.home, value)
             if key:
                 # Python startup variables from the host/profile must not leak
