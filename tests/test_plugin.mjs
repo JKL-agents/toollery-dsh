@@ -12,14 +12,14 @@ const tools = [
   { name: 'add', description: 'Add numbers and return their sum', parameters: { type: 'object' } },
   { name: 'temperature', description: 'Convert Celsius Fahrenheit temperature', parameters: { type: 'object' } },
 ]
-async function until(fn, timeoutMs = 60000) {
+async function until(fn, timeoutMs = 60000, diagnostic = async () => '') {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     const value = await fn()
     if (value) return value
     await new Promise(done => setTimeout(done, 50))
   }
-  throw new Error('Timed out waiting for worker state')
+  throw new Error(`Timed out waiting for worker state${await diagnostic()}`)
 }
 
 test('shipped bundle setup, explicit preparation, current selections, failure/OFF, restart and disposal', { timeout: 120000 }, async () => {
@@ -106,7 +106,13 @@ test('shipped bundle setup, explicit preparation, current selections, failure/OF
     await service.register('api', tools)
     await until(async () => (await service.status('api')).phase === 'needs_preparation')
     await service.prepare('api')
-    await until(async () => (await service.status('api')).phase === 'ready')
+    await until(async () => (await service.status('api')).phase === 'ready', 60000, async () => {
+      const state = await service.status('api')
+      return `: worker=${service.phase}; session=${JSON.stringify({
+        phase: state.phase, error: state.error || '', manuals_valid: state.manuals_valid,
+        tool_count: state.tool_count, completed: state.completed, total: state.total,
+      })}`
+    })
     assert.equal(calls, 2)
     assert.equal((await service.status('api')).manuals_valid, 2)
     const hostHashBeforeDiscovery = service.snapshotHash('api')

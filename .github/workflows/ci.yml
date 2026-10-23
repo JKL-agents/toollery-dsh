@@ -26,6 +26,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python scripts/build_plugin.py
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $env:TOOLLERY_TEST_PYTHON = (Get-Command python).Source
           node --test tests/test_plugin.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m twine check dist/*.whl dist/*.tar.gz
