@@ -626,7 +626,21 @@ class WorkerBridge(DSHBridge):
             value = read_json(self.home / 'manual-generator.json')
             key = manual_key(self.home, value)
             if key:
-                options['env'] = {**os.environ, value.get('parameters', {}).get('api_key_env', 'TOOLLERY_MANUAL_API_KEY'): key}
+                # Python startup variables from the host/profile must not leak
+                # into the private bridge interpreter.  ``-I`` ignores most of
+                # them, but Python builds on Windows can still consult
+                # PYTHONHOME while initializing the runtime.  A hostile or
+                # stale value can make the child exit before provider_bridge
+                # reads stdin, yielding an opaque bridge_error and no request.
+                env = dict(os.environ)
+                for name in (
+                    'PYTHONHOME', 'PYTHONPATH', 'PYTHONPLATLIBDIR',
+                    'PYTHONUSERBASE', 'PYTHONNOUSERSITE',
+                    'PYTHONPYCACHEPREFIX', 'PYTHONWARNINGS',
+                ):
+                    env.pop(name, None)
+                env[value.get('parameters', {}).get('api_key_env', 'TOOLLERY_MANUAL_API_KEY')] = key
+                options['env'] = env
         # Own direct generator children so unloading the plugin cannot leave
         # our provider bridge running after its worker exits.
         with self.process_lock:
