@@ -1,5 +1,7 @@
 # Environment assumptions audit
 
+This page records checks at the time of each audit. Subsequent successful Desktop installation reports from the maintainer and a colleague are recorded in the [current verification summary](verification.md#desktop-installation-reports-2026-10-23); earlier GUI-validation limits below describe the automated audit's scope.
+
 ## Final lifecycle and packaging follow-up (local, 2026-10-23)
 
 - Current regression: **68 Python passes / 3 optional skips**, **16 Node passes**, and a fresh isolated real-host run of **5 turns / 9 scripted chat-provider requests**. The dynamic tool needed one mock manual; 12 valid manuals were reused. No paid APIs or user Desktop profiles were used.

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+## 0.2.2 - 2026-10-23
+
+- Streamline the root README around Desktop installation and everyday use; move manual demo setup and developer commands into dedicated guides. Record successful Desktop installation reports from the maintainer and a colleague on another computer.
+- Add one-click collapse/restore for Web controls and turn cards, with a compact ON/OFF status button and a browser-persisted display preference. Folding preserves drafts and retrieval settings.
+- Add an optional DSH discovery-provider example bundle and skill guidance: fetch a complete local candidate batch, reuse or explicitly permit manual generation, and return snapshot-bound ranking without registering or executing candidates.
+- Document optional Desktop/CLI integration, discovery-tool visibility, generation policy and the boundary between ranking and same-turn execution.
+- Align the runtime-reported version with package metadata and include the optional example's config, guidance and license in source archives.
+
 ## 0.2.1 - 2026-10-23
 
 - Fix Windows built-in provider detection by using the configured provider bridge instead of executable-path string equality.

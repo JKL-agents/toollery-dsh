@@ -1,0 +1,9 @@
+- insert:
+    - id: toollery-discovery-example
+      name: '@local/toollery-discovery-example'
+      config:
+        representation: spec_manual
+        k: 3
+        # Owner consent: true allows up to six missing candidate manuals to be
+        # generated with Toollery's configured provider during a discovery call.
+        allowManualGeneration: false

@@ -1,6 +1,6 @@
 {
   "name": "@jkl-agents/dsh-toollery",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Proxy-query tool retrieval for an existing DeepSeek Harness profile",
   "type": "module",
   "license": "MIT",

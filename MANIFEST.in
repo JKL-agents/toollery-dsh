@@ -3,6 +3,7 @@ include Start-Toollery.cmd
 include DSH_Toollery_demo.gif DSH_Toollery_demo_2.gif
 recursive-include docs *.md *.json
 recursive-include examples *.json *.mjs *.txt
+recursive-include examples/dsh/discovery-provider *.md *.yml LICENSE
 recursive-include scripts *.py
 recursive-include scripts *.ps1
 recursive-include tests *.py *.mjs

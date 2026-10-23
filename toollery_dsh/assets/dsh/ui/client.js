@@ -4,6 +4,23 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
     const stores = new Map()
+    // Browser-only presentation preference; never change retrieval settings.
+    const collapsedKey = 'toollery.panel.collapsed'
+    const displayListeners = new Set()
+    let panelCollapsed = false
+    try { panelCollapsed = window.localStorage.getItem(collapsedKey) === 'true' } catch { /* Storage may be disabled. */ }
+    function subscribeDisplay(listener) {
+      displayListeners.add(listener)
+      return () => displayListeners.delete(listener)
+    }
+    function togglePanel() {
+      panelCollapsed = !panelCollapsed
+      try { window.localStorage.setItem(collapsedKey, String(panelCollapsed)) } catch { /* Keep the in-memory preference. */ }
+      displayListeners.forEach(listener => listener())
+    }
+    function usePanelCollapsed() {
+      return React.useSyncExternalStore(subscribeDisplay, () => panelCollapsed, () => false)
+    }
     async function request(session_id, options, action, details) {
       const response = await fetch('/toollery/ui', {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
@@ -137,9 +154,23 @@ window.__ModuleLoader__.load({
     }
     function Controls({ sessionId }) {
       const { data, busy, error, configure } = useToollery(sessionId)
+      const collapsed = usePanelCollapsed()
       const [draftK, setDraftK] = React.useState('3')
       React.useEffect(() => { if (data) setDraftK(String(data.k)) }, [data?.k])
-      return h('section', { 'aria-label': 'Toollery controls', style: { ...panel, marginTop: 8 } },
+      const status = data ? data.enabled ? 'ON' : 'OFF' : 'Loading'
+      const notice = error || data?.error || (['approval_required', 'refresh_failed', 'needs_setup', 'needs_preparation', 'unsupported'].includes(data?.phase) ? data.phase : '')
+      return h('section', { 'aria-label': 'Toollery controls', style: collapsed
+        ? { marginTop: 4, display: 'flex', justifyContent: 'flex-end' } : { ...panel, marginTop: 8 } },
+        h('button', { type: 'button', hidden: !collapsed, 'aria-label': 'Expand Toollery panel', 'aria-expanded': false,
+          title: `Toollery ${status}${notice ? ' — Needs attention' : ''}. Expand controls.`, onClick: togglePanel,
+          style: { ...input, display: collapsed ? 'inline-flex' : 'none', alignItems: 'center', gap: 6,
+            padding: '5px 8px', cursor: 'pointer', fontWeight: 700 } },
+          h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+            strokeWidth: 1.8, 'aria-hidden': true }, h('path', { d: 'M3 5h18l-7 8v6l-4 2v-8Z' })),
+          h('span', { style: { color: data?.enabled ? 'var(--color-success, #19865b)' : 'inherit' } }, status),
+          notice && h('span', { 'aria-label': 'Toollery needs attention', style: { color: '#c35d40' } }, '!')),
+        // Keep controls mounted so draft fields and preparation consent survive hiding.
+        h('div', { hidden: collapsed, style: { display: collapsed ? 'none' : undefined } },
         h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
           h('strong', null, 'Toollery'),
           h('button', { role: 'switch', 'aria-label': 'Enable Toollery', 'aria-checked': !!data?.enabled,
@@ -159,7 +190,12 @@ window.__ModuleLoader__.load({
           h('button', { style: input, disabled: busy || !data?.enabled || data?.budget !== 'top_k'
             || !Number.isInteger(Number(draftK)) || Number(draftK) < 1 || Number(draftK) > data?.tool_count || Number(draftK) === data?.k,
             onClick: () => configure({ k: Number(draftK) }) }, 'Apply k'),
-          h('span', { style: { opacity: .65 } }, data ? `Full pool: ${data.tool_count}` : 'Waiting for session')),
+          h('span', { style: { opacity: .65 } }, data ? `Full pool: ${data.tool_count}` : 'Waiting for session'),
+          h('button', { type: 'button', 'aria-label': 'Collapse Toollery panel', 'aria-expanded': true,
+            title: 'Hide controls and turn cards. Retrieval keeps its current setting.', onClick: togglePanel,
+            style: { ...input, marginLeft: 'auto', display: 'inline-flex', padding: 5, cursor: 'pointer' } },
+            h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
+              strokeWidth: 2, 'aria-hidden': true }, h('path', { d: 'm6 15 6-6 6 6' })))),
         h('div', { role: 'status', style: { marginTop: 6, opacity: .75 } }, !data ? 'Loading session settings...' : busy ? 'Applying settings...' : data.enabled
           ? 'Changes apply to the next turn. The current selection stays fixed.' : 'OFF: the next turn uses the tools allowed by DSH without retrieval.'),
         data?.phase && h('div', { style: { marginTop: 8 } },
@@ -171,7 +207,7 @@ window.__ModuleLoader__.load({
           data.error && h('p', { style: { margin: '6px 0', overflowWrap: 'anywhere' } }, data.error),
           data.configuration_directory && h('div', { style: { opacity: .75, overflowWrap: 'anywhere' } }, `Configuration: ${data.configuration_directory}`),
           h(Initialization, { data, busy, configure })),
-        error && h('div', { role: 'alert', style: { color: '#c35d40', marginTop: 4 } }, error))
+        error && h('div', { role: 'alert', style: { color: '#c35d40', marginTop: 4 } }, error)))
     }
     function ToolList({ title, tools }) {
       return h('details', { style: { marginTop: 8 } }, h('summary', { style: { cursor: 'pointer' } }, title),
@@ -182,6 +218,7 @@ window.__ModuleLoader__.load({
     }
     function TurnCard({ sessionId, turn }) {
       const { data } = useToollery(sessionId)
+      const collapsed = usePanelCollapsed()
       const record = data?.turns?.filter(item => item.turn === turn.turn).at(-1)
       if (!record) return null // Never invent records for older, unobserved turns.
       const pool = record.tool_details || []
@@ -189,7 +226,8 @@ window.__ModuleLoader__.load({
       const calls = record.calls || []
       const calledNames = [...new Set(calls.map(call => call.name))]
       const errors = calls.filter(call => call.status === 'error').length
-      return h('section', { 'aria-label': `Toollery tool selection for turn ${record.turn}`, style: { ...panel, margin: '8px 0' } },
+      return h('section', { 'aria-label': `Toollery tool selection for turn ${record.turn}`, hidden: collapsed,
+        style: { ...panel, margin: '8px 0', display: collapsed ? 'none' : undefined } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' } },
           h('strong', null, `Toollery · ${record.enabled ? 'ON' : 'OFF'}`),
           h('span', { style: { opacity: .7 } }, record.enabled ? `${record.representation} · ${record.budget === 'all' ? 'all' : 'k=' + record.k} · ${record.retrieval_ms.toFixed(2)} ms` : 'Full pool; retrieval bypassed')),

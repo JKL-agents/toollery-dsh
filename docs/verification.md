@@ -1,5 +1,33 @@
 # Verification summary
 
+## v0.2.2 release packaging
+
+This patch changes the panel, examples and documentation; it does not change retrieval algorithms. Local release checks cover synchronized worker/plugin/runtime version metadata, wheel/source metadata validation, matching UI assets in the plugin and embedded wheel, inclusion of the optional example's configuration/skill/license in source archives, documentation links and artifact checksums. The existing Windows CI runs the offline regression and installed-package checks for the release commit. Earlier interaction and discovery checks are recorded below; they were not repeated solely for documentation edits.
+
+## Desktop installation reports (2026-10-23)
+
+The maintainer reported successful installation and normal use of the published npm plugin in DSH Desktop. A colleague subsequently reported successful installation on another computer. These user reports complement the isolated host checks below: the Desktop GUI installation path has now been exercised outside the automated fixtures. The colleague's OS, Desktop/runtime versions, setup route and feature coverage were not recorded, so this is not a platform matrix or validation of every feature. The panel collapse feature is added in v0.2.2 with the separate fixture coverage below.
+
+## Collapsible panel (local, 2026-10-23)
+
+The actual client bundle passed an isolated React 18 / headless Edge interaction check: collapse/restore, unchanged ON/OFF state, retained k/model drafts and expanded result details, reload persistence, a narrow collapsed layout, and fallback when browser storage is disabled. Folding issued zero backend mutations. Expanded and collapsed screenshots were inspected. This checks the client with a mock status endpoint, not the installed Desktop GUI; no profile changes or paid API calls were made. Core retrieval suites were not rerun for this display-only change.
+
+## Optional discovery example (local, 2026-10-23)
+
+The [candidate-batch provider example](../examples/dsh/discovery-provider/README.md) passed six focused Node tests covering full-batch handoff, owner-controlled generation, approval/pending results, cancellation, input validation and candidate identity checks. Core regression suites were not rerun for this example-only addition.
+
+Both the main v0.2.1 bundle and the example archive were installed through `dsh plugin add` into a fresh isolated CLI profile using runtime **0.2.1-rc.2**. Two native user turns completed through real DSH tool dispatch and the shipped Python worker, with scripted chat responses and a mock manual provider:
+
+| Check | Observed result |
+| --- | --- |
+| Candidate acquisition | Each discovery request submitted all six catalog candidates, without provider prefiltering. |
+| Cold / warm cache | First request generated six mock manuals; a different second query generated zero. |
+| Ranking | Temperature and hashing queries ranked their corresponding candidates first. This is a plumbing check, not a retrieval benchmark. |
+| Host boundary | The host exposed only `discover_tools` before and after discovery; candidate names were never registered or invoked. |
+| Distribution | The packed archive included its entry point, catalog, bundle patch, optional skill, README and MIT license, with no dependencies or install scripts. |
+
+No paid API calls or changes to the user's Desktop profile were made. This check exercised CLI archive installation and a real native host, not the Desktop GUI or Creation-mode installation. External catalog fetching, candidate authorization/execution and same-turn model-facing expansion remain outside this ranking-only example.
+
 ## Final hot-fix regression (local, 2026-10-23)
 
 The current v0.2.1 candidate passed **68 Python tests with 3 optional ToolTalk skips** (71 total) and **16 Node tests**. No paid API calls were made. These totals supersede the earlier baseline counts below.
@@ -57,7 +85,7 @@ Earlier baseline verified on Windows, 2026-10-22, using Python 3.12.7 and existi
 
 The plugin uses a scoped public-stream re-entry for DSH's addition-only projection; adapter metadata can resolve twice. Dynamic adapters, earlier interceptors and arbitrary plugins are not universally covered. Native root agents are supported; PTC, subagent retrieval and Linux/macOS are outside these checks. Live pool mutation was outside this earlier baseline; the hot-fix acceptance above adds next-turn registration/refresh coverage. Browser rendering of the existing-profile UI has not been manually exercised in this round. Paid-provider retrieval/execution findings below remain evidence from the earlier standalone integration.
 
-Build/test commands are in the root [README](../README.md); the [plugin guide](plugin.md) describes installation and lifecycle boundaries. `scripts/plugin_smoke.py` drives the real-host check against an existing Node DSH and an isolated profile, with `tests/fixtures/dsh-plugin-host.mjs` supplying an unrelated restrictive policy.
+Build/test commands are in the [development guide](development.md); the [plugin guide](plugin.md) describes installation and lifecycle boundaries. `scripts/plugin_smoke.py` drives the real-host check against an existing Node DSH and an isolated profile, with `tests/fixtures/dsh-plugin-host.mjs` supplying an unrelated restrictive policy.
 
 The [environment audit](environment-audit.md) records a checkout-import false positive found during dependency review and its fix. Worker acceptance now verifies the private installed distribution before exercising DSH, rather than treating a successful source import as proof of installation.
 
@@ -96,4 +124,4 @@ Verified on **Windows, 2026-10-22**, with Python 3.12.7, Node.js 24.19, pnpm 11.
 
 Linux/macOS and arbitrary external DSH presets remain unverified. The external-command wrapper has launch-level coverage; GitHub CI has not yet run remotely. Skipped tests are not counted as passes.
 
-Use the root [README](../README.md) for installation, offline chat/Web checks and development test commands. The [publishing checklist](publishing.md) covers artifact validation. Run installed-wheel checks from a separate directory to verify configuration-relative resources and state.
+Use the root [README](../README.md) for installation, the [standalone guide](standalone.md) for offline chat/Web checks, and the [development guide](development.md) for test commands. The [publishing checklist](publishing.md) covers artifact validation. Run installed-wheel checks from a separate directory to verify configuration-relative resources and state.

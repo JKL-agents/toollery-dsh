@@ -4,9 +4,9 @@ An independently written DSH plugin implementing [Toollery](https://arxiv.org/ab
 
 ## DSH Desktop
 
-The local target is **DSH Desktop 0.12.1** with DSH runtime **0.2.1-rc.2**, a working chat model and native tool presentation (Standard preset). Isolated host checks passed; Desktop GUI onboarding remains unverified.
+The local target is **DSH Desktop 0.12.1** with DSH runtime **0.2.1-rc.2**, a working chat model and native tool presentation (Standard preset). Isolated host checks passed. The maintainer and a colleague have also reported successful Desktop installation; the colleague's exact environment and feature coverage were not recorded.
 
-1. Open **Plugins → Add plugin → Install a third-party plugin**. Enter the `.tgz` URL or downloaded bundle's **absolute local path**. Install, enable, and restart if requested. Desktop supplies its own Node/package manager.
+1. Open **Plugins → Add plugin → Install a third-party plugin**. Enter `@jkl-agents/dsh-toollery` to install the current npm release, or use a release `.tgz` URL/downloaded bundle's **absolute local path**. Install, enable, and restart if requested. Desktop supplies its own Node/package manager.
 2. Open Toollery's plugin details and select **Set up local worker**. DSH Desktop reuses its bundled Python runtime in a profile-local environment; it does not install another DSH/Python runtime or modify PATH. Windows x64 users without a usable bundled/system Python can allow a private runtime download. Other platforms require Python 3.12+ with venv/pip. Setup makes no model calls.
 3. Save your manual-generation model, OpenAI-compatible API base URL and API key in the plugin form. DSH retains its own chat configuration. The key stays in a local profile file, not an OS keychain; it is not returned to the form. Blank retains an existing key.
 4. Start a **new native conversation**. Review its tool pool and missing-manual count, confirm possible API charges, and select **Generate missing manuals (uses API)**. Valid entries are reused; each manual contains three proxy queries.
@@ -15,6 +15,8 @@ The local target is **DSH Desktop 0.12.1** with DSH runtime **0.2.1-rc.2**, a wo
 The plugin adds no demo tools. Configure tool sources in DSH normally. First preparation can take time for large pools.
 
 ## Optional provider-owned discovery
+
+An optional [installable local example](https://github.com/JKL-agents/toollery-dsh/tree/main/examples/dsh/discovery-provider) registers `discover_tools`, supplies a complete candidate batch and returns ranked recommendations. Its guide covers Desktop installation, generation consent, prompts, optional skill guidance and provider adaptation. The main package does not install it automatically.
 
 Providers that can search a remote catalog may pass a candidate batch to the service without registering that batch in DSH first:
 
@@ -57,6 +59,8 @@ Start a **new native conversation**. Select **Set up local worker** in Toollery 
 Use the UI form above for manual settings. Advanced users can instead edit `manual-generator.json` and create `.env` with `TOOLLERY_MANUAL_API_KEY=...` in the directory shown by `/toollery status`. Then select **Generate missing manuals (uses API)**, or run `/toollery prepare`. Preparation explicitly permits API charges. When ready, the default is ON, `spec_manual`, top-k, k=3. An explicit OFF choice is respected.
 
 Use `/toollery on`, `/toollery off`, `/toollery mode spec_manual`, `/toollery budget top_k`, `/toollery k 3`, or the Web controls. Changes apply to the next user turn. OFF bypasses retrieval and preserves DSH's own tool restrictions, even if the worker has stopped. ON failures are explicit.
+
+Use the chevron in the controls header to hide the controls and turn cards. A small funnel button beside the composer shows ON/OFF (and `!` when attention is needed); click it to restore the panel. Folding only changes visibility: settings, current selections, results and unsaved form inputs stay intact. The browser remembers the display preference across conversations and reloads; unsaved inputs are retained only while the components remain mounted, not across reloads.
 
 Toollery captures the root agent's registered, visible tools. It does not load tool sources again or replace providers, model catalogs, personas, or DSH_HOME. Per-turn retrieval uses only tools still allowed by the host. Original schemas go to the chat model; manuals remain local. Historical calls retain their original meaning when the current subset changes.
 

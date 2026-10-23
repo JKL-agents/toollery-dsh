@@ -1,0 +1,12 @@
+{
+  "name": "@local/toollery-discovery-example",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Optional local candidate-batch discovery example for Toollery and DSH",
+  "type": "module",
+  "license": "MIT",
+  "main": "./index.mjs",
+  "files": ["index.mjs", "catalog.mjs", "cordis.patch.yml", "README.md", "LICENSE", "skills/"],
+  "engines": { "node": "^22.19.0 || >=24", "dsh": "0.2.1-rc.2" },
+  "dsh": { "bundle": { "patch": "./cordis.patch.yml" } }
+}

@@ -4,7 +4,7 @@ The v0.2 plugin is an official-format DSH bundle. The standalone Windows launche
 
 ## Install
 
-The local target is **DSH Desktop 0.12.1**, with a working chat model and **native tool presentation** (Standard preset); its DSH runtime is pinned separately to **0.2.1-rc.2**. Desktop supplies Node and its package manager for plugin installation; no separate terminal or Node/pnpm installation is required. The plugin does not copy or change the chat model's credentials. The Desktop GUI onboarding path remains unverified; see [verification](verification.md).
+The local target is **DSH Desktop 0.12.1**, with a working chat model and **native tool presentation** (Standard preset); its DSH runtime is pinned separately to **0.2.1-rc.2**. Desktop supplies Node and its package manager for plugin installation; no separate terminal or Node/pnpm installation is required. The plugin does not copy or change the chat model's credentials. The maintainer and a colleague have reported successful Desktop installation; see [verification](verification.md) for the scope of those reports and automated checks.
 
 ### Recommended: install by package name
 
@@ -20,7 +20,9 @@ DSH uses its configured npm registry and installs the published plugin bundle. T
 
 Download the matching `.tgz` asset from the [latest GitHub release](https://github.com/JKL-agents/toollery-dsh/releases/latest). Enter its release URL or downloaded file's **absolute path** in the same dialog.
 
-1. Open **Plugins → Add plugin → Install a third-party plugin**. Enter the downloaded bundle's **absolute path**, such as `C:\Users\you\Downloads\jkl-agents-dsh-toollery-0.2.1.tgz`, or its release asset URL. Install, enable and restart if requested.
+### First setup (either installation method)
+
+1. After installing by package name or archive, enable Toollery and restart if DSH requests it.
 2. Open Toollery's plugin details. Select **Set up local worker**. Windows x64 users without Python can first check **Allow private Python download if needed**. The status shows setup stages; the first runtime download may take several minutes. No model calls occur during setup.
 3. In **Manual-generation model**, save your model, OpenAI Chat Completions-compatible API base URL and key. Defaults are `deepseek-flash` and `https://api.deepseek.com`. Saving checks cache readiness without generating manuals.
 4. Start a **new native conversation**. Its Toollery panel shows the full pool and valid/missing manual counts. If DSH is still showing its new-chat landing page, send a harmless greeting to create the session; Toollery remains OFF until ready, and that greeting uses your normal chat API. Check the API/charges confirmation, then select **Generate missing manuals (uses API)**. Tool specifications are sent to the chosen manual provider. Three proxy queries are generated per tool; retries can add requests. Progress is shown while preparation runs.
@@ -52,6 +54,8 @@ Setup verifies that the worker is installed inside the private venv. Worker and 
 The plugin starts OFF until manuals are ready. With a complete valid cache it automatically becomes ready on later launches. An explicit per-session OFF choice is retained. DSH chat remains usable while setup is incomplete.
 
 ## Provider-owned discovery batches
+
+For a complete optional DSH bundle, installation steps, prompts and skill guidance, see the [candidate-batch discovery example](../examples/dsh/discovery-provider/README.md). It registers `discover_tools` and ranks all six local candidates without adding them to the host registry. Manual generation requires owner configuration; the example is separate from the main npm package.
 
 An optional provider can use the plugin as a local retrieval service when it has fetched a batch of possible tools from its own catalog:
 
@@ -99,6 +103,8 @@ DSH continues using its own chat configuration and credentials. They can belong 
 Select **Generate missing manuals (uses API)** or send `/toollery prepare`. This explicitly permits generation API calls for missing/stale tools. Worker concurrency defaults to 8, adjustable from 1 to 8 in `settings.json` before starting DSH. Install, setup and cache checks do not generate manuals. Cache misses are visible; there is no silent spec-only fallback. After manually editing generator/settings files, restart DSH so readiness is revalidated, then prepare if needed.
 
 After successful preparation the plugin defaults to ON / `spec_manual` / top-k / k=3. If you explicitly switched OFF while preparation was running, it stays OFF. Use `/toollery on` when ready. Setup/preparation progress appears in the Web controls; terminal users can poll `/toollery status`.
+
+**Hide or restore the panel:** click the header chevron to hide the controls and turn cards. The small funnel button beside the composer keeps showing ON/OFF and flags errors or required setup/approval with `!`. Click it to expand in place. Folding makes no configuration requests and leaves retrieval, the current selection, results and unsaved inputs unchanged. The display preference is shared across conversations in the same browser origin and survives reloads when browser storage is available. Unsaved form inputs survive folding, not page reloads. The separate plugin setup page remains available.
 
 ### Changes during a conversation
 
