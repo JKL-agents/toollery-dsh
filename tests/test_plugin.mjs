@@ -108,10 +108,12 @@ test('shipped bundle setup, explicit preparation, current selections, failure/OF
     await service.prepare('api')
     await until(async () => (await service.status('api')).phase === 'ready', 60000, async () => {
       const state = await service.status('api')
+      let report = ''
+      try { report = readFileSync(join(directory, 'runs', 'manual-preparation.json'), 'utf8') } catch {}
       return `: worker=${service.phase}; session=${JSON.stringify({
         phase: state.phase, error: state.error || '', manuals_valid: state.manuals_valid,
         tool_count: state.tool_count, completed: state.completed, total: state.total,
-      })}`
+      })}; calls=${calls}; report=${report}`
     })
     assert.equal(calls, 2)
     assert.equal((await service.status('api')).manuals_valid, 2)
