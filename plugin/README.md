@@ -44,9 +44,11 @@ if (result.status === 'approval_required') {
 The CLI needs its own supported Node/pnpm environment and Python 3.12+. Desktop's application-owned profile is not a CLI profile named `desktop`.
 
 ```sh
-dsh plugin --profile web add /absolute/path/jkl-agents-dsh-toollery-0.2.0.tgz
+dsh plugin --profile web add @jkl-agents/dsh-toollery
 dsh --profile web
 ```
+
+For a pinned or offline install, replace the package name with the matching `.tgz` release asset path.
 
 Use your existing profile name in place of `web`. The plugin does not install another DSH runtime. Its profile-local Python worker has no third-party Python dependencies.
 
