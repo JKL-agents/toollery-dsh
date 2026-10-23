@@ -1,0 +1,8 @@
+- insert:
+    - id: toollery-plugin
+      name: '@jkl-agents/dsh-toollery'
+      # DSH Desktop already injects this absolute installation-owned path for
+      # its Office bundle. Reuse that host protocol; CLI profiles leave it
+      # unset and use their normal Python discovery path.
+      config:
+        desktopResources: !!js process.env.DSH_DESKTOP_OFFICE_RESOURCES

@@ -1,5 +1,7 @@
 # Toollery for DSH — Proxy-query tool retrieval with Web UI controls
 
+Historical community-post draft for v0.1.1. For the v0.2.0 existing-profile plugin, see the [plugin guide](plugin.md) and [release notes](release-notes-v0.2.0.md). This draft has not been posted or updated automatically.
+
 Hi everyone! 👋
 
 I'd like to share **Toollery for DSH**, an independent implementation of the [Toollery](https://arxiv.org/abs/2609.22218) methodology for DeepSeek Harness.

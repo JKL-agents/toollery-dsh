@@ -1,7 +1,7 @@
 """Local transport for the DSH plugin. No DSH SDK imports are required here."""
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import hmac
@@ -32,6 +32,32 @@ def snapshot_pool(schemas: list[dict]) -> ToolPool:
     return ToolPool(records)
 
 
+def diff_pools(before: ToolPool, after: ToolPool) -> dict:
+    before_ids, after_ids = set(before.tool_ids), set(after.tool_ids)
+    added = sorted(after_ids - before_ids)
+    removed = sorted(before_ids - after_ids)
+    changed = sorted(
+        tool_id for tool_id in before_ids & after_ids
+        if before.tools[tool_id].spec_hash != after.tools[tool_id].spec_hash
+    )
+    unchanged = sorted((before_ids & after_ids) - set(changed))
+    return {
+        "added": added,
+        "changed": changed,
+        "removed": removed,
+        "unchanged": unchanged,
+        "changed_count": len(added) + len(changed) + len(removed),
+    }
+
+
+class StaleRefresh(RuntimeError):
+    """The host changed while a staged refresh was being built."""
+
+    def __init__(self, message="Tool pool changed while refresh was running"):
+        super().__init__(message)
+        self.code = "stale_refresh"
+
+
 @dataclass
 class SessionState:
     pool: ToolPool
@@ -41,6 +67,7 @@ class SessionState:
     budget: str = "top_k"
     k: int = 3
     revision: int = 0
+    pool_revision: int = 0
     ready: bool = False
     enabled: bool = True
 
@@ -54,7 +81,7 @@ class DSHBridge:
     """
 
     def __init__(self, output_dir: Path, *, representation="spec_manual", budget="top_k", k=3, on_selection=None,
-                 on_snapshot=None, enabled=True, state_dir=None, compact_audit=False):
+                 on_snapshot=None, enabled=True, state_dir=None, compact_audit=False, handlers=None):
         self.validate_options(representation, budget, k)
         if not isinstance(enabled, bool):
             raise ValueError("enabled must be a boolean")
@@ -66,6 +93,7 @@ class DSHBridge:
         self.calls: list[dict] = []
         self.on_selection = on_selection
         self.on_snapshot = on_snapshot
+        self.handlers = handlers or {}
         self.sessions: dict[str, SessionState] = {}
         self.selections: list[dict] = []
         self.observations: list[dict] = []
@@ -108,6 +136,7 @@ class DSHBridge:
                             state.representation, state.budget, state.k = options['representation'], options['budget'], options['k']
                             state.enabled = options['enabled']
                             state.revision = options.get('revision', 0)
+                            state.pool_revision = options.get('pool_revision', 0)
             # Use hashed session names so an SDK session ID is never a path.
             filename = digest(session_id).removeprefix("sha256:")[:20]
             atomic_json(self.output_dir / f"snapshot-{filename}.json", {
@@ -116,44 +145,49 @@ class DSHBridge:
                 "discovery": discovery,
                 "schemas": [pool.tools[key].documentation for key in pool.tool_ids],
             })
-        return {"snapshot_hash": pool.snapshot_hash, "tool_count": len(pool.tools)}
+        return {"snapshot_hash": pool.snapshot_hash, "tool_count": len(pool.tools),
+                "pool_revision": self.sessions[session_id].pool_revision}
 
-    def prepare(self, session_id, generator, cache: ManualCache, *, workers=4, cache_only=False,
-                with_manuals=True, progress=None):
+    def _build_preparation(self, pool, representation, generator, cache: ManualCache, *, workers=4,
+                           cache_only=False, with_manuals=True, progress=None, persist_report=True,
+                           generation_progress=None):
         if isinstance(workers, bool) or not isinstance(workers, int) or not 1 <= workers <= 8:
             raise ValueError("workers must be 1..8")
         started = time.perf_counter()
-        with self._lock:
-            state = self.sessions[session_id]
-            # A failed re-preparation must not leave an old ready state active.
-            state.ready = False
-            state.searches = {}
-            if not with_manuals and state.representation != "spec":
-                raise ValueError("Spec-only preparation requires spec mode")
+        if not with_manuals and representation != "spec":
+            raise ValueError("Spec-only preparation requires spec mode")
         manuals, reports = {}, []
         if with_manuals:
             # Parallelize independent tools using the existing cache identities
             # and paid-request locks. Do not change the generation contract.
             def one(tool_id):
                 try:
-                    return prepare_manuals(ToolPool([state.pool.tools[tool_id]]), generator, cache,
+                    return prepare_manuals(ToolPool([pool.tools[tool_id]]), generator, cache,
                                            count=3, cache_only=cache_only)
                 except PreparationError as error:
                     return error
 
             with ThreadPoolExecutor(max_workers=workers) as executor:
-                for index, result in enumerate(executor.map(one, state.pool.tool_ids), 1):
+                futures = {executor.submit(one, tool_id): tool_id for tool_id in pool.tool_ids}
+                completed = {}
+                for index, future in enumerate(as_completed(futures), 1):
+                    result = future.result()
+                    completed[futures[future]] = result
+                    if generation_progress:
+                        generation_progress(result.report)
+                    if progress:
+                        progress(index, len(pool.tools))
+                for tool_id in pool.tool_ids:
+                    result = completed[tool_id]
                     if isinstance(result, PreparationError):
                         reports.append(result.report)
                     else:
                         manuals.update(result.records)
                         reports.append(result.report)
-                    if progress:
-                        progress(index, len(state.pool.tools))
             report = {
-                "ready": len(manuals) == len(state.pool.tools),
-                "snapshot_hash": state.pool.snapshot_hash,
-                "total": len(state.pool.tools), "valid": len(manuals),
+                "ready": len(manuals) == len(pool.tools),
+                "snapshot_hash": pool.snapshot_hash,
+                "total": len(pool.tools), "valid": len(manuals),
                 "cache_hits": sum(r["cache_hits"] for r in reports),
                 "generated": sum(r["generated"] for r in reports),
                 "generation_calls": sum(r["generation_calls"] for r in reports),
@@ -168,22 +202,74 @@ class DSHBridge:
                 for key, value in item["usage_from_new_generations"].items():
                     report["usage_from_new_generations"][key] = report["usage_from_new_generations"].get(key, 0) + value
             if report["ready"]:
-                report["manual_pool_hash"] = digest([(key, manuals[key]["manual_key"], manuals[key]["manual_hash"]) for key in state.pool.tool_ids])
-            atomic_json(self.output_dir / "manual-preparation.json", report)
+                report["manual_pool_hash"] = digest([(key, manuals[key]["manual_key"], manuals[key]["manual_hash"]) for key in pool.tool_ids])
+            if persist_report:
+                atomic_json(self.output_dir / "manual-preparation.json", report)
             if not report["ready"]:
                 raise PreparationError(report)
         else:
-            report = {"ready": True, "manuals_prepared": False, "total": len(state.pool.tools)}
+            report = {"ready": True, "manuals_prepared": False, "total": len(pool.tools),
+                      "valid": len(pool.tools), "snapshot_hash": pool.snapshot_hash}
             atomic_json(self.output_dir / "manual-preparation.json", report)
         searches = {}
         for representation in REPRESENTATIONS if with_manuals else ("spec",):
-            documents = build_documents(state.pool, representation, manuals if with_manuals else None)
-            searches[representation] = ToolSearch(state.pool, BM25Index(documents))
+            documents = build_documents(pool, representation, manuals if with_manuals else None)
+            searches[representation] = ToolSearch(pool, BM25Index(documents))
+        return searches, report
+
+    def prepare(self, session_id, generator, cache: ManualCache, *, workers=4, cache_only=False,
+                with_manuals=True, progress=None, generation_progress=None):
         with self._lock:
+            state = self.sessions[session_id]
+            # A failed re-preparation must not leave an old ready state active.
+            state.ready = False
+            state.searches = {}
+            pool = state.pool
+            representation = state.representation
+        searches, report = self._build_preparation(
+            pool, representation, generator, cache, workers=workers, cache_only=cache_only,
+            with_manuals=with_manuals, progress=progress, generation_progress=generation_progress)
+        with self._lock:
+            state = self.sessions[session_id]
+            if state.pool.snapshot_hash != pool.snapshot_hash:
+                raise StaleRefresh()
             state.searches = searches
             state.preparation = report
             state.ready = True
         return report
+
+    def refresh_pool(self, session_id, schemas, generator, cache: ManualCache, *, workers=4,
+                     cache_only=False, expected_pool_revision=None, expected_snapshot_hash=None,
+                     progress=None, representation=None, generation_progress=None):
+        """Build a new immutable pool state and commit it with a CAS check."""
+        target = snapshot_pool(schemas)
+        with self._lock:
+            state = self.sessions[session_id]
+            if (expected_pool_revision is not None and state.pool_revision != expected_pool_revision
+                    or expected_snapshot_hash is not None and state.pool.snapshot_hash != expected_snapshot_hash):
+                raise StaleRefresh()
+            base_pool, base_revision = state.pool, state.pool_revision
+            diff = diff_pools(base_pool, target)
+            if target.snapshot_hash == base_pool.snapshot_hash:
+                return {"status": "unchanged", "snapshot_hash": base_pool.snapshot_hash,
+                        "pool_revision": base_revision, "diff": diff}
+            representation = representation or state.representation
+        searches, report = self._build_preparation(
+            target, representation, generator, cache, workers=workers, cache_only=cache_only,
+            with_manuals=representation != "spec", progress=progress,
+            generation_progress=generation_progress)
+        with self._lock:
+            state = self.sessions[session_id]
+            if state.pool.snapshot_hash != base_pool.snapshot_hash or state.pool_revision != base_revision:
+                raise StaleRefresh()
+            state.pool = target
+            state.searches = searches
+            state.preparation = report
+            state.ready = True
+            state.pool_revision += 1
+            self._persist(session_id)
+            return {"status": "committed", "snapshot_hash": target.snapshot_hash,
+                    "pool_revision": state.pool_revision, "diff": diff, "report": report}
 
     def configure(self, session_id, *, representation=None, budget=None, k=None, enabled=None):
         if enabled is not None and not isinstance(enabled, bool):
@@ -225,7 +311,7 @@ class DSHBridge:
         state = self.sessions[session_id]
         atomic_json(self._state_file(session_id), {
             'snapshot_hash': state.pool.snapshot_hash,
-            'options': {key: getattr(state, key) for key in ('enabled', 'representation', 'budget', 'k', 'revision')},
+            'options': {key: getattr(state, key) for key in ('enabled', 'representation', 'budget', 'k', 'revision', 'pool_revision')},
             'selections': [s for s in self.selections if s['session_id'] == session_id],
             'calls': [c for c in self.calls if c['session_id'] == session_id],
         })
@@ -237,25 +323,40 @@ class DSHBridge:
             raise ValueError("A text prompt is required")
         with self._lock:
             state = self.sessions[session_id]
-            if state.enabled and not state.ready:
+            options = payload.get('options') or {}
+            representation = options.get('representation', state.representation)
+            budget = options.get('budget', state.budget)
+            k = options.get('k', state.k)
+            enabled = options.get('enabled', state.enabled)
+            self.validate_options(representation, budget, k)
+            if enabled and not state.ready:
                 raise RuntimeError("Manuals and index are not ready")
             if payload["snapshot_hash"] != state.pool.snapshot_hash:
                 raise ValueError("Stale tool snapshot")
-            if state.enabled and state.representation not in state.searches:
+            if payload.get("pool_revision") is not None and payload["pool_revision"] != state.pool_revision:
+                raise ValueError("Stale tool pool revision")
+            if enabled and representation not in state.searches:
                 raise ValueError("Selected representation is not prepared")
             started = time.perf_counter()
-            ranked = (state.searches[state.representation].select(prompt, budget=state.budget, k=state.k)
-                      if state.enabled else [])
+            eligible = payload.get('eligible_names', list(state.pool.tool_ids))
+            if (not isinstance(eligible, list) or any(not isinstance(name, str) for name in eligible)
+                    or len(set(eligible)) != len(eligible) or not set(eligible) <= set(state.pool.tool_ids)):
+                raise ValueError('Invalid eligible tool set')
+            ranked = (state.searches[representation].select(prompt, budget=budget, k=k,
+                                                                 eligible_ids=eligible)
+                      if enabled else [])
             result = {
                 "session_id": session_id, "snapshot_hash": state.pool.snapshot_hash,
                 "prompt": prompt, "message_ids": payload.get("message_ids", []),
-                "turn": payload.get("turn"), "representation": state.representation,
-                "budget": state.budget, "k": state.k, "revision": state.revision,
-                "enabled": state.enabled,
+                "turn": payload.get("turn"), "representation": representation,
+                "budget": budget, "k": k, "revision": state.revision,
+                "pool_revision": state.pool_revision,
+                "enabled": enabled,
                 "full_pool_count": len(state.pool.tools),
-                "selected_names": [hit.tool_id for hit in ranked] if state.enabled else list(state.pool.tool_ids),
+                "eligible_pool_count": len(eligible),
+                "selected_names": [hit.tool_id for hit in ranked] if enabled else sorted(eligible),
                 "ranked": [{"name": hit.tool_id, "score": hit.score} for hit in ranked],
-                "retrieval_ms": (time.perf_counter() - started) * 1000 if state.enabled else 0.0,
+                "retrieval_ms": (time.perf_counter() - started) * 1000 if enabled else 0.0,
             }
             if not self.compact_audit:
                 result['tool_details'] = [
@@ -311,6 +412,7 @@ class DSHBridge:
                 'enabled': state.enabled, 'ready': not state.enabled or state.ready,
                 'retrieval_ready': state.ready, 'tool_count': len(state.pool.tools),
                 'tool_names': list(state.pool.tool_ids), 'snapshot_hash': state.pool.snapshot_hash,
+                'pool_revision': state.pool_revision,
                 'representation': state.representation, 'budget': state.budget, 'k': state.k,
                 'manuals_valid': state.preparation.get('valid', 0),
                 'last_selection': latest,
@@ -350,10 +452,14 @@ class DSHBridge:
                         result = bridge.observe(payload)
                     elif self.path == "/call":
                         result = bridge.record_call(payload)
+                    elif self.path in bridge.handlers:
+                        result = bridge.handlers[self.path](payload)
                     else:
                         self.reply(404, {"error": "unknown_endpoint"})
                         return
                     self.reply(200, result)
+                except StaleRefresh as error:
+                    self.reply(409, {"error": error.code})
                 except (ValueError, TypeError, KeyError):
                     self.reply(409, {"error": "invalid_or_changed_snapshot"})
                 except RuntimeError:

@@ -87,7 +87,7 @@ class MockGenerator:
 class CommandGenerator:
     """A local provider bridge: JSON on stdin, JSON on stdout, never shell=True."""
 
-    def __init__(self, config: dict, *, cwd=None):
+    def __init__(self, config: dict, *, cwd=None, runner=None):
         command = config.get("command")
         if not isinstance(command, list) or not command or any(not isinstance(part, str) or not part for part in command):
             raise ValueError("command must be a nonempty array of program/argument strings")
@@ -95,6 +95,7 @@ class CommandGenerator:
             raise ValueError("A command generator requires an explicit model identifier")
         self.command = command
         self.cwd = cwd
+        self.runner = runner or subprocess.run
         self.timeout = float(config.get("timeout_seconds", 120))
         if self.timeout <= 0:
             raise ValueError("timeout_seconds must be positive")
@@ -125,7 +126,7 @@ class CommandGenerator:
             "model": self.contract["model"],
             "parameters": self.contract["parameters"],
         }
-        result = subprocess.run(child_command(self.command, self.cwd), cwd=self.cwd,
+        result = self.runner(child_command(self.command, self.cwd), cwd=self.cwd,
                                 input=canonical(request), capture_output=True, text=True,
                                 encoding="utf-8", timeout=self.timeout, check=False)
         if result.returncode:

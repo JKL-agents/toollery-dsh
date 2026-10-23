@@ -55,7 +55,7 @@ class RankedTool:
 
 
 class Retriever(Protocol):
-    def search(self, query: str, limit: int | None = 10) -> list[RankedTool]: ...
+    def search(self, query: str, limit: int | None = 10, *, eligible_ids=None) -> list[RankedTool]: ...
 
 
 class BM25Index:
@@ -82,21 +82,25 @@ class BM25Index:
             "exact_name_boost": False,
         }
 
-    def search(self, query: str, limit: int | None = 10) -> list[RankedTool]:
+    def search(self, query: str, limit: int | None = 10, *, eligible_ids=None) -> list[RankedTool]:
         if limit is not None and limit < 1:
             raise ValueError("limit must be positive, or None for all")
         scores = defaultdict(float)
+        eligible = None if eligible_ids is None else set(eligible_ids)
         size = len(self.tool_ids)
         for term in sorted(set(tokenize(query))):
             matches = self.postings.get(term, ())
             idf = math.log1p((size - len(matches) + 0.5) / (len(matches) + 0.5))
             for index, frequency in matches:
+                if eligible is not None and self.tool_ids[index] not in eligible:
+                    continue
                 scores[index] += idf * frequency * (self.k1 + 1) / (frequency + self.length_norms[index])
         key = lambda pair: (-pair[1], self.tool_ids[pair[0]])
         if limit is None:
             ordered = sorted(scores.items(), key=key)
             ranked = [RankedTool(self.tool_ids[index], score) for index, score in ordered]
-            ranked.extend(RankedTool(tool_id, 0.0) for index, tool_id in enumerate(self.tool_ids) if index not in scores)
+            ranked.extend(RankedTool(tool_id, 0.0) for index, tool_id in enumerate(self.tool_ids)
+                          if index not in scores and (eligible is None or tool_id in eligible))
             return ranked
         ordered = heapq.nsmallest(min(limit, size), scores.items(), key=key)
         return [RankedTool(self.tool_ids[index], score) for index, score in ordered]
@@ -108,10 +112,16 @@ class ToolSearch:
     def __init__(self, pool: ToolPool, index: Retriever):
         self.pool, self.index = pool, index
 
-    def select(self, prompt: str, *, budget: str = "top_k", k: int = 10) -> list[RankedTool]:
+    def select(self, prompt: str, *, budget: str = "top_k", k: int = 10, eligible_ids=None) -> list[RankedTool]:
         if budget not in {"all", "top_k"}:
             raise ValueError("budget must be all or top_k")
-        return self.index.search(prompt, limit=None if budget == "all" else k)
+        limit = None if budget == "all" else k
+        if eligible_ids is None:
+            return self.index.search(prompt, limit=limit)
+        eligible = set(eligible_ids)
+        if not eligible <= set(self.pool.tool_ids):
+            raise ValueError("Eligible tools must belong to the prepared pool")
+        return self.index.search(prompt, limit=limit, eligible_ids=eligible)
 
     def original_tools(self, ranked: list[RankedTool]):
         return [self.pool.tools[hit.tool_id] for hit in ranked]

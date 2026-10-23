@@ -82,7 +82,7 @@ try {
     $SignaturePath = Join-Path $StateDirectory 'installed-source.txt'
     if (-not (Test-Path -LiteralPath $SignaturePath) -or [IO.File]::ReadAllText($SignaturePath) -ne $SourceSignature) {
         Write-Host 'Installing Toollery and pinned DSH dependencies...'
-        Run-Checked $UvExe @('pip', 'install', '--python', $PythonExe, '--reinstall-package', 'toollery-dsh', $RepoRoot)
+        Run-Checked $UvExe @('pip', 'install', '--python', $PythonExe, '--reinstall-package', 'toollery-dsh', "${RepoRoot}[demo]")
         [IO.File]::WriteAllText($SignaturePath, $SourceSignature)
     }
 } finally { if ($InstallLock) { $InstallLock.Dispose() } }

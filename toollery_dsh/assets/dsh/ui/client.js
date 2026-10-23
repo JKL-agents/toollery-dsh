@@ -4,10 +4,10 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
     const stores = new Map()
-    async function request(session_id, options) {
+    async function request(session_id, options, action, details) {
       const response = await fetch('/toollery/ui', {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id, ...(options === undefined ? {} : { options }) }),
+        body: JSON.stringify({ session_id, ...(options === undefined ? {} : { options }), ...(action ? { action } : {}), ...details }),
       })
       const body = await response.json()
       if (!response.ok) throw new Error(body.error || 'Toollery is unavailable')
@@ -25,12 +25,12 @@ window.__ModuleLoader__.load({
           catch (error) { if (sequence === store.sequence) store.publish({ error: error.message }) }
           finally { store.pending = false }
         }
-        store.configure = async options => {
+        store.configure = async (options, action, details) => {
           if (store.value.busy) return
           store.sequence++
           store.publish({ busy: true, error: '' })
-          try { store.publish({ data: await request(id, options) }) }
-          catch (error) { store.publish({ error: error.message }) }
+          try { store.publish({ data: await request(id, options, action, details) }); return true }
+          catch (error) { store.publish({ error: error.message }); return false }
           finally { store.publish({ busy: false }) }
         }
         store.subscribe = fn => {
@@ -49,6 +49,92 @@ window.__ModuleLoader__.load({
     }
     const panel = { border: '1px solid var(--border-color, #8885)', borderRadius: 10, padding: '10px 12px', fontSize: 12, color: 'inherit', background: 'var(--background-secondary, transparent)' }
     const input = { color: 'inherit', background: 'var(--background-primary, transparent)', border: '1px solid #8886', borderRadius: 6, padding: '3px 6px', fontSize: 12 }
+    function formatDuration(seconds) {
+      if (!Number.isFinite(seconds) || seconds < 0) return null
+      const rounded = Math.max(1, Math.round(seconds))
+      if (rounded < 60) return `${rounded}s`
+      const minutes = Math.floor(rounded / 60)
+      const rest = rounded % 60
+      return rest ? `${minutes}m ${rest}s` : `${minutes}m`
+    }
+    function progressText(data) {
+      if (!data || !['preparing', 'refreshing'].includes(data.phase)) return null
+      const done = Number.isFinite(data.completed) ? data.completed : 0
+      const total = Number.isFinite(data.total) ? data.total : 0
+      const elapsed = formatDuration(data.elapsed_seconds)
+      const eta = formatDuration(data.eta_seconds)
+      const count = total ? `${done}/${total}` : `${done}`
+      return `Manual preparation: ${count} · elapsed ${elapsed || '—'} · ${eta ? `about ${eta} remaining` : 'estimating remaining time…'}`
+    }
+    function Initialization({ data, busy, configure }) {
+      const generator = data?.generator
+      const [allowDownload, setAllowDownload] = React.useState(false)
+      const [model, setModel] = React.useState('deepseek-flash')
+      const [url, setUrl] = React.useState('https://api.deepseek.com')
+      const [key, setKey] = React.useState('')
+      const [consent, setConsent] = React.useState(false)
+      const [saved, setSaved] = React.useState(false)
+      React.useEffect(() => {
+        if (generator?.editable) { setModel(generator.model); setUrl(generator.api_url) }
+      }, [generator?.model, generator?.api_url, generator?.editable])
+      React.useEffect(() => { setConsent(false) }, [data?.phase, generator?.model, generator?.api_url])
+      if (!data?.managed || data.phase === 'unsupported') return null
+      const running = busy || ['preparing', 'refreshing', 'setting_up', 'starting'].includes(data.phase)
+      const unsaved = !!generator?.editable && (model !== generator.model || url !== generator.api_url || !!key)
+      return h('div', { style: { marginTop: 10 } },
+        data.phase === 'needs_setup' && h('div', null,
+          h('strong', null, '1. Prepare the local worker'),
+          h('p', null, 'Use an existing Python 3.12+ installation, or allow a private runtime download. DSH and its models are unchanged. No API calls are made.'),
+          h('label', { style: { display: 'block', marginBottom: 8 } }, h('input', { type: 'checkbox', checked: allowDownload,
+            disabled: busy, onChange: e => setAllowDownload(e.target.checked) }), ' Allow private Python download if needed (Windows x64; internet required)'),
+          h('button', { style: input, disabled: busy, onClick: () => configure(undefined, 'setup', { setup_options: { allow_download: allowDownload } }) }, 'Set up local worker')),
+        generator && h('details', { open: !generator.configured || data.phase === 'needs_preparation', style: { marginTop: 10 } },
+          h('summary', { style: { cursor: 'pointer' } }, '2. Manual-generation model'),
+          h('p', null, 'Uses OpenAI Chat Completions, independently of your DSH chat model. Saving settings makes no API calls.'),
+          !generator.editable && h('p', null, 'A custom generator is configured. Saving this form replaces it with the built-in API bridge.'),
+          h('form', { autoComplete: 'off', onSubmit: async e => {
+            e.preventDefault(); setSaved(false)
+            if (await configure(undefined, 'save_generator', { generator_settings: { model, api_url: url, api_key: key } })) { setKey(''); setSaved(true) }
+          }, style: { display: 'grid', gap: 8, maxWidth: 620 } },
+          h('label', null, 'Model ', h('input', { required: true, 'aria-label': 'Manual model', style: { ...input, width: '100%', boxSizing: 'border-box' },
+            value: model, maxLength: 200, disabled: running, onChange: e => { setModel(e.target.value); setSaved(false) } })),
+          h('label', null, 'API base URL ', h('input', { required: true, type: 'url', 'aria-label': 'Manual API URL', style: { ...input, width: '100%', boxSizing: 'border-box' },
+            value: url, disabled: running, onChange: e => { setUrl(e.target.value); setSaved(false) } })),
+          h('label', null, 'API key ', h('input', { type: 'password', autoComplete: 'new-password', 'aria-label': 'Manual API key',
+            placeholder: generator.key_configured ? 'Key configured — leave blank to retain' : 'Enter your manual-generation key',
+            style: { ...input, width: '100%', boxSizing: 'border-box' }, value: key, maxLength: 4096, disabled: running,
+            onChange: e => { setKey(e.target.value); setSaved(false) } })),
+          h('small', null, 'Saved locally in your DSH profile. The saved key is never returned to this form. This is local file storage, not an OS keychain.'),
+          h('button', { type: 'submit', style: input, disabled: running }, 'Save manual settings'),
+          saved && h('span', { role: 'status' }, 'Settings saved. The cache is being checked; no API calls were made.'))),
+        data.session_required && h('p', null, '3. Start a new conversation with native tool presentation. Its Toollery panel will show the tool pool and let you confirm manual generation.'),
+        (['needs_preparation', 'approval_required', 'refresh_failed'].includes(data.phase)
+          || (data.phase === 'ready' && data.manuals_prepared === false)) && h('div', { style: { marginTop: 10 } },
+          h('strong', null, '3. Prepare manuals'),
+          h('p', null, ['needs_preparation', 'ready'].includes(data.phase)
+            ? `${data.manuals_valid} cached / ${data.tool_count} tools. Up to ${Math.max(0, data.tool_count - data.manuals_valid)} manuals need generation, with three proxy queries each. Provider retries can add requests. Tool specifications are sent to the manual provider.`
+            : `${data.missing ?? 'Missing'} manuals need generation for the updated tool pool${data.pending_tool_count ? ` (${data.pending_tool_count} tools)` : ''}. Tool specifications are sent to the manual provider; retries can add charges. When ready, resubmit your message; it is not automatically replayed.`),
+          unsaved && h('p', { role: 'status' }, 'Save the edited manual settings before generating.'),
+          h('label', { style: { display: 'block', marginBottom: 8 } }, h('input', { type: 'checkbox', checked: consent, disabled: busy,
+            onChange: e => setConsent(e.target.checked) }), ' I allow API calls and possible charges to generate missing or changed manuals.'),
+          h('button', { style: input, disabled: busy || !consent || unsaved || (generator?.editable && !generator.configured),
+            onClick: () => { setConsent(false); configure(undefined, 'prepare') } }, 'Generate missing manuals (uses API)')),
+        data.phase === 'ready' && !data.session_required && h('p', { role: 'status' },
+          data.manuals_prepared === false ? 'Spec retrieval is ready. Prepare manuals before switching to a manual-based mode.'
+            : `Ready: all ${data.tool_count} manuals are cached. ${data.enabled ? 'Toollery is ON for the next turn.' : 'Switch ON when you want to try retrieval.'}`))
+    }
+    function PluginSetup() {
+      const { data, busy, error, configure } = useToollery(undefined)
+      return h('section', { 'aria-label': 'Toollery initialization', style: panel },
+        h('h3', { style: { marginTop: 0 } }, 'Toollery setup'),
+        h('p', null, 'Uses your existing DSH chat model and tools. Manual generation has its own model and credentials.'),
+        data && h('p', { role: 'status' }, `Worker: ${data.phase}${data.message ? ' — ' + data.message : ''}`),
+        progressText(data) && h('p', { role: 'status', style: { opacity: .8 } }, progressText(data)),
+        ['setting_up', 'starting', 'refreshing'].includes(data?.phase) && h('progress', { 'aria-label': 'Toollery worker setup', style: { width: '100%' } }),
+        h(Initialization, { data, busy, configure }),
+        data?.configuration_directory && h('small', { style: { overflowWrap: 'anywhere' } }, `Local data: ${data.configuration_directory}`),
+        error && h('p', { role: 'alert', style: { color: '#c35d40' } }, error))
+    }
     function Controls({ sessionId }) {
       const { data, busy, error, configure } = useToollery(sessionId)
       const [draftK, setDraftK] = React.useState('3')
@@ -57,7 +143,7 @@ window.__ModuleLoader__.load({
         h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
           h('strong', null, 'Toollery'),
           h('button', { role: 'switch', 'aria-label': 'Enable Toollery', 'aria-checked': !!data?.enabled,
-            disabled: busy || !data, onClick: () => configure({ enabled: !data.enabled }),
+            disabled: busy || !data || (!data.enabled && data.phase && !data.retrieval_ready), onClick: () => configure({ enabled: !data.enabled }),
             style: { ...input, fontWeight: 700, color: data?.enabled ? '#19865b' : 'inherit' } }, data ? data.enabled ? 'ON' : 'OFF' : 'Loading'),
           h('label', null, 'Representation ', h('select', { 'aria-label': 'Toollery representation', style: input,
             value: data?.representation || 'spec_manual', disabled: busy || !data || !data.enabled,
@@ -75,7 +161,16 @@ window.__ModuleLoader__.load({
             onClick: () => configure({ k: Number(draftK) }) }, 'Apply k'),
           h('span', { style: { opacity: .65 } }, data ? `Full pool: ${data.tool_count}` : 'Waiting for session')),
         h('div', { role: 'status', style: { marginTop: 6, opacity: .75 } }, !data ? 'Loading session settings...' : busy ? 'Applying settings...' : data.enabled
-          ? 'Changes apply to the next turn. The current selection stays fixed.' : 'OFF: the next turn receives the full tool pool without retrieval.'),
+          ? 'Changes apply to the next turn. The current selection stays fixed.' : 'OFF: the next turn uses the tools allowed by DSH without retrieval.'),
+        data?.phase && h('div', { style: { marginTop: 8 } },
+          h('div', null, `Status: ${data.phase} · Manuals ${data.manuals_valid}/${data.tool_count}`),
+          progressText(data) && h('div', { role: 'status', style: { opacity: .8, marginTop: 4 } }, progressText(data)),
+          ['preparing', 'refreshing', 'setting_up', 'starting'].includes(data.phase) && h('progress', {
+            'aria-label': 'Toollery preparation progress', max: data.total || 1,
+            ...(['preparing', 'refreshing'].includes(data.phase) && data.total ? { value: data.completed || 0 } : {}), style: { width: '100%', marginTop: 6 } }),
+          data.error && h('p', { style: { margin: '6px 0', overflowWrap: 'anywhere' } }, data.error),
+          data.configuration_directory && h('div', { style: { opacity: .75, overflowWrap: 'anywhere' } }, `Configuration: ${data.configuration_directory}`),
+          h(Initialization, { data, busy, configure })),
         error && h('div', { role: 'alert', style: { color: '#c35d40', marginTop: 4 } }, error))
     }
     function ToolList({ title, tools }) {
@@ -99,7 +194,7 @@ window.__ModuleLoader__.load({
           h('strong', null, `Toollery · ${record.enabled ? 'ON' : 'OFF'}`),
           h('span', { style: { opacity: .7 } }, record.enabled ? `${record.representation} · ${record.budget === 'all' ? 'all' : 'k=' + record.k} · ${record.retrieval_ms.toFixed(2)} ms` : 'Full pool; retrieval bypassed')),
         h('p', { style: { margin: '8px 0 2px', fontSize: 13 } },
-          `Pool ${record.full_pool_count} → Selected ${record.selected_names.length} → Called ${calledNames.length} tools`,
+          `Pool ${record.full_pool_count}${record.eligible_pool_count === undefined ? '' : ' → Allowed ' + record.eligible_pool_count} → Selected ${record.selected_names.length} → Called ${calledNames.length} tools`,
           h('span', { style: { opacity: .65, fontSize: 12 } }, ` (${calls.length} calls${errors ? ", " + errors + " errors" : ""})`)),
         h(ToolList, { title: `Selected tools (${selected.length})`, tools: selected }),
         h(ToolList, { title: `Called tools (${calledNames.length})`, tools: pool.filter(tool => calledNames.includes(tool.name)) }),
@@ -108,6 +203,9 @@ window.__ModuleLoader__.load({
     return {
       inject: ['slots'],
       apply(ctx) {
+        ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+          name: 'plugins.bundle.config', key: '@jkl-agents/dsh-toollery',
+        }, PluginSetup))
         ctx.slots.inject('conversation.composer.dock', () => ctx.slots.register({
           name: 'conversation.composer.dock', id: 'toollery-controls', order: 10,
         }, Controls))

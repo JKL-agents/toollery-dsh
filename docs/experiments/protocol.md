@@ -75,7 +75,7 @@ Cold generation of 28 manuals took 18.637 seconds / 24,125 reported tokens at wo
 The release contains the experiment drivers and this compact protocol, but not datasets, paid manual caches, provider response logs or private local runs. Exact paid outputs can change with provider/model updates. Run optional scripts from the repository root in a source checkout:
 
 ```powershell
-& .venv/Scripts/python.exe -m pip install '.[benchmark]'
+& .venv/Scripts/python.exe -m pip install '.[benchmark,demo]'
 & .venv/Scripts/python.exe scripts/download_toolret.py
 & .venv/Scripts/python.exe scripts/analyze_toolret.py
 & .venv/Scripts/python.exe scripts/build_toolret_prototype.py

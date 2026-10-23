@@ -6,6 +6,7 @@ recursive-include examples *.json *.mjs *.txt
 recursive-include scripts *.py
 recursive-include scripts *.ps1
 recursive-include tests *.py *.mjs
+recursive-include plugin *.mjs *.json *.yml *.md
 recursive-include toollery_dsh/assets *.mjs *.js *.json *.yaml *.txt *.html
 prune work
 prune runs

@@ -26,6 +26,46 @@ class PreparationError(RuntimeError):
         super().__init__(f"Manual pool not ready: {report['valid']}/{report['total']} tools valid")
 
 
+def cache_preflight(
+    pool: ToolPool,
+    generator: Generator,
+    cache: ManualCache,
+    *,
+    count: int = 3,
+    evidence_limit: int = 24000,
+) -> dict:
+    """Check manual identities without making provider calls.
+
+    This deliberately mirrors the identity path used by ``prepare_manuals``
+    so refresh thresholds count real cache misses, including schema or
+    generator-contract changes, rather than merely counting changed tools.
+    """
+    if count < 1 or count > 64 or evidence_limit < 256:
+        raise ValueError("Invalid preflight bounds")
+    valid, missing, failures = 0, [], []
+    for tool_id in pool.tool_ids:
+        try:
+            tool = pool.tools[tool_id]
+            evidence = normalize(tool, evidence_limit)
+            identity = cache_identity(tool, evidence, generator, count)
+            if cache.read(identity) is None:
+                missing.append(tool_id)
+            else:
+                valid += 1
+        except Exception as error:
+            failures.append({"tool_id": tool_id, "reason": type(error).__name__})
+    return {
+        "total": len(pool.tools),
+        "valid": valid,
+        "missing": len(missing),
+        "missing_tool_ids": missing,
+        "failures": failures,
+        "proxy_query_count": count,
+        "evidence_limit": evidence_limit,
+        "generator": generator.contract,
+    }
+
+
 def cache_identity(tool: ToolRecord, evidence: Evidence, generator: Generator, count: int) -> dict:
     return {
         "format_version": 2,

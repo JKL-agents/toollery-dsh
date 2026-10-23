@@ -1,0 +1,23 @@
+{
+  "name": "@jkl-agents/dsh-toollery",
+  "version": "0.2.0",
+  "description": "Proxy-query tool retrieval for an existing DeepSeek Harness profile",
+  "type": "module",
+  "license": "MIT",
+  "author": "Jikun Liu",
+  "repository": {"type": "git", "url": "git+https://github.com/JKL-agents/toollery-dsh.git", "directory": "plugin"},
+  "main": "./index.mjs",
+  "exports": {".": "./index.mjs", "./client": "./ui/client.js", "./package.json": "./package.json"},
+  "files": ["*.mjs", "cordis.patch.yml", "shared/", "ui/", "worker/", "LICENSE", "README.md"],
+  "engines": {"node": "^22.19.0 || >=24", "dsh": "0.2.1-rc.2"},
+  "peerDependencies": {"@deepseek-ai/cordis": "*", "@deepseek-ai/dsh-llm": "0.2.1-rc.2"},
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {"optional": true},
+    "@deepseek-ai/dsh-llm": {"optional": true}
+  },
+  "dsh": {
+    "bundle": {"patch": "./cordis.patch.yml"},
+    "client": {"platform": "web",
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-chat"]}
+  }
+}

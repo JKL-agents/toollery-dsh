@@ -1,6 +1,10 @@
 # Tool sources and DSH integration
 
+For v0.2 existing-profile installation, use the [plugin guide](plugin.md). The wrapper below remains an advanced legacy integration.
+
 Toollery has two parts: Python owns normalization, manual cache and retrieval; an external Cordis plugin observes DSH tools, requests a selection, filters schemas and guards calls. No DSH source fork is required.
+
+The same Python service exposes an optional provider-owned discovery hook. A provider may fetch a candidate batch from its own remote catalog and call `service.rankCandidates(agent.id, prompt, batch, options)`. Toollery keeps only the model-facing schema fields, persists manuals and candidate schemas locally, and returns a snapshot-bound structured selection (`tool_id`, opaque `candidate_ref`, `spec_hash`, and score) plus the compatibility `selected_names` field. The provider retains authentication, executor mapping, registration and execution authorization. Discovery does not add the batch to DSH's registry or mutate the active host snapshot; it is a retrieval operation over a provider-supplied batch. Providers should recheck the candidate snapshot and schema hash before exposing a result, because selection is a retrieval suggestion rather than an execution grant.
 
 ```mermaid
 flowchart TD
@@ -17,7 +21,7 @@ flowchart TD
   Filter --> UI[Optional Web controls and cards]
 ```
 
-“Complete” means all tools registered and visible to this agent after configured discovery. The full registry remains intact between turns. Manual generation sees tool evidence, never benchmark queries or labels. Chat receives original specs, never replacement manuals.
+“Complete” means all tools registered and visible to this agent after configured discovery. In the existing-profile plugin, `ctx.tools.schemas(agent)` supplies the reconciliation/cache universe at the first assembly of each new user turn; downstream `assembled.tools` supplies the eligible subset for retrieval. A restricted tool may be cached without becoming callable. The host registry stays intact. The standalone wrapper instead retains its frozen session snapshot and requires restart after changes. Manual generation sees tool evidence, never benchmark queries or labels. Chat receives original specs, never replacement manuals.
 
 ## Bundled launcher sources
 

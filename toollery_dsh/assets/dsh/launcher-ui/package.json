@@ -2,7 +2,18 @@
   "name": "@local/toollery-launcher-ui",
   "private": true,
   "type": "module",
-  "exports": { ".": "./index.js", "./client": "./client.js" },
-  "dsh": { "client": { "platform": "web", "immediately": true,
-    "inject": ["@deepseek-ai/dsh-client-ui-workspace"] } }
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-workspace"
+      ]
+    }
+  },
+  "version": "0.2.0"
 }

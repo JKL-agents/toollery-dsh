@@ -7,17 +7,35 @@ This project implements an existing method, not an original algorithm. It is not
 ## What it does
 
 - Discovers the complete tool pool visible to a DSH agent after configured sources finish loading.
-- Validates cached manuals and generates missing or changed entries when explicitly requested.
+- Validates cached manuals, prepares the initial pool with consent, and refreshes small later cache misses under the configured generation policy.
 - Searches `spec`, `manual`, or `spec_manual` with local BM25.
 - Sends selected tools' **original schemas** to the chat model. Manuals stay in the local search index.
 - Provides an ON/OFF switch, retrieval settings and per-turn selected/called tool cards in the official DSH Web UI.
 - Supports the bundled 12-tool demo, a filesystem MCP preset, and configured MCP or Cordis sources.
 
-The default is **ON / spec_manual / top_k / k=3**. OFF gives DSH the full original tool pool and bypasses retrieval. `all` retains every tool but can still rank them using the selected representation.
+After preparation, the default is **ON / spec_manual / top_k / k=3**. OFF bypasses retrieval and retains the host-allowed tool pool. `all` retains every tool but can still rank them using the selected representation.
 
 ## Install and try it
 
-### Windows: free preview, no API key
+### Plugin for your existing DSH
+
+v0.2 adds an installable DSH bundle. It uses your existing profile, chat model and registered tools; no second DSH installation is needed. The local target is **DSH Desktop 0.12.1**, with a working chat model and native tool presentation (Standard preset). The DSH runtime is pinned separately to **0.2.1-rc.2**.
+
+Download `jkl-agents-dsh-toollery-0.2.0.tgz` from the [v0.2.0 GitHub release](https://github.com/JKL-agents/toollery-dsh/releases/tag/v0.2.0).
+
+1. In Desktop, open **Plugins → Add plugin → Install a third-party plugin**. Paste the downloaded file's **absolute path** (or a release asset URL), install, enable it, and restart if DSH requests it. Desktop supplies its own Node/package manager.
+2. Open Toollery's plugin details. Select **Set up local worker**. If Python 3.12+ is unavailable, Windows x64 users can allow a **private Python download** first. This does not install another DSH or call a model.
+3. In **Manual-generation model**, enter the model, OpenAI-compatible API base URL and key, then save. These settings are independent of DSH's chat model. The key stays in local profile storage and is not returned to the form.
+4. Start a **new native conversation**. Review its tool count and missing-manual count, allow generation charges, then select **Generate missing manuals (uses API)**. Each tool gets three proxy queries; valid cached entries are reused.
+5. Once ready, ask a prompt that uses one of your existing tools. Inspect the selected/called tool cards, adjust k, or switch OFF. Settings apply to the next turn; an explicit OFF choice stays OFF when preparation finishes.
+
+No terminal, `.env` editing or standalone launcher is needed for this path. On platforms other than Windows x64, install Python 3.12+ with venv/pip before worker setup. Initial generation needs provider access and can take time for large pools. See the [verification summary](docs/verification.md) for the current Desktop validation boundary.
+
+OFF bypasses retrieval while respecting DSH/other plugins' tool restrictions. ON requires a healthy worker and prepared cache. On a later user turn, the plugin detects registered tool additions, removals and schema changes without restarting. Up to 15 missing manuals are generated automatically by default; larger updates require approval, followed by resubmitting the message. The panel shows progress, elapsed time and an approximate ETA. Native root conversations are supported; PTC and subagent retrieval are outside this version's scope.
+
+See the [plugin guide](docs/plugin.md) for setup, upgrades, removal and compatibility boundaries. The Windows launcher below remains a **standalone demo**, with a private DSH environment for users who want to try the behavior first.
+
+### Standalone Windows demo: free preview, no API key
 
 **Requires Windows x64, a writable folder and internet access.** Python, Node.js, pnpm and DSH are installed privately; no administrator rights or preinstalled development tools are needed.
 
@@ -39,7 +57,7 @@ You should see `add_numbers` called and the result **42**. Change k or switch To
 
 This free preview executes real DSH tools with a scripted model and mock manuals. It supports the example requests, not arbitrary chat, and makes no paid API requests.
 
-The launcher creates a **standalone demo with its own DSH environment**. It is not yet a bundle installable through an existing DSH's Plugins page. See [integration](docs/integration.md) for the current opt-in wrapper approach to an existing host.
+The launcher creates a **standalone demo with its own DSH environment**. For an existing DSH installation, use the plugin above.
 
 ### Use your own chat and manual-generation models
 
@@ -71,7 +89,7 @@ Credentials are saved locally in `.toollery-launcher/workspace/.env`. Blank key 
 
 Both recordings use the bundled 12-tool demo. Settings apply to the next turn; they do not change a turn already in progress.
 
-## Manual installation
+## Manual standalone demo installation
 
 ### Prerequisites
 
@@ -93,7 +111,7 @@ These commands use PowerShell. Activation is optional; use the environment's exe
 git clone https://github.com/JKL-agents/toollery-dsh.git
 cd toollery-dsh
 py -3.12 -m venv .venv
-& .venv/Scripts/python.exe -m pip install .
+& .venv/Scripts/python.exe -m pip install ".[demo]"
 & .venv/Scripts/toollery-dsh.exe init my-workspace
 & .venv/Scripts/toollery-dsh.exe doctor --config my-workspace/toollery.json
 ```
@@ -146,6 +164,7 @@ The allowed directory is `filesystem-demo/playground`, created by `init`. Ask th
 
 `init` creates JSON configuration, `.env.example` and `.gitignore` without overwriting files. Paths resolve against the config directory. Chat/manual generation may use different models, endpoints and keys.
 
+- [Existing DSH plugin installation](docs/plugin.md)
 - [Configuration and cache](docs/configuration.md)
 - [Tool sources and existing DSH integration](docs/integration.md)
 - [Troubleshooting](docs/troubleshooting.md)
@@ -161,7 +180,7 @@ On our **ToolRet development subset** (10,656 tools / 5,679 queries), Recall@3 w
 
 The **ToolTalk executable supplement** exposed a limitation: latest-query top-3 retrieval reduced tokens but missed tools needed by follow-ups and dependencies. Strict adapted turn success fell from 67/79 OFF to 51/79 ON. Token reduction does not imply equal quality or universal latency improvement. See the report for protocols and denominators.
 
-v0.1.x uses lexical BM25 and the latest user text. There is no history-aware rewriting, dependency expansion or recovery search. The pool is frozen for an agent's lifetime; restart after tool changes. Implementation changes with an unchanged public schema cannot invalidate manuals automatically. Missing manuals fail preparation explicitly; there is no silent spec fallback. A larger k or OFF may suit tasks requiring broader access.
+Retrieval uses lexical BM25 and the latest user text. There is no history-aware rewriting, dependency expansion or recovery search. Each user turn freezes its settings and selection across all model steps. The plugin reconciles the agent's visible registry at the first assembly of a later turn, then selects only within the host-eligible assembly. A restricted tool may have a cached manual without becoming callable. A removed tool is never restored by a frozen selection; implementation changes with an unchanged public schema remain outside the cache boundary. Optional provider-owned discovery ranks external candidate batches but does not autonomously discover, authorize or register tools. A larger k or OFF may suit tasks requiring broader access. Plugin checks are recorded separately from the earlier benchmark experiments.
 
 ## Development and layout
 
@@ -170,6 +189,7 @@ toollery/             Preparation, cache, retrieval and metrics
   adapters/dsh.py     Authenticated localhost bridge
 toollery_dsh/         Installable CLI, configuration and launchers
   assets/            Cordis plugins, UI and pinned runtime manifests
+plugin/              Existing-profile plugin, worker lifecycle and bundle metadata
 examples/            Source-checkout configuration examples
 scripts/             Optional benchmark and verification drivers
 tests/               Offline unit, transport and plugin tests
@@ -177,13 +197,15 @@ docs/                User guides, experiment evidence and release drafts
 ```
 
 ```powershell
-& .venv/Scripts/python.exe -m pip install -e '.[dev]'
+& .venv/Scripts/python.exe -m pip install -e '.[dev,demo]'
 & .venv/Scripts/python.exe -m unittest discover -s tests -v
-node --test tests/test_dsh_snapshot.mjs tests/test_dsh_sources.mjs tests/test_dsh_ui.mjs tests/test_dsh_launcher.mjs
+node --test tests/test_dsh_snapshot.mjs tests/test_dsh_sources.mjs tests/test_dsh_ui.mjs tests/test_dsh_launcher.mjs tests/test_dsh_lifecycle.mjs tests/test_plugin.mjs
 & .venv/Scripts/python.exe -m build
+& .venv/Scripts/python.exe scripts/build_plugin.py
+node --test tests/test_plugin.mjs
 ```
 
-Optional experiments need `.[benchmark]` and separately downloaded data. Dataset dumps, benchmark manuals, local credentials, environments and historical run logs are not distributed.
+The bundle embeds the dependency-free worker wheel and shared UI/retrieval assets. Only the standalone demo and its DSH acceptance drivers require the Python `demo` extra. Optional experiments need `.[benchmark,demo]` and separately downloaded data. Dataset dumps, benchmark manuals, local credentials, environments and historical run logs are not distributed.
 
 ## License
 
