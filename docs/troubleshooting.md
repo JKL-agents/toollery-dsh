@@ -6,7 +6,9 @@ For the **existing-profile plugin**, start with `/toollery status` or the Web co
 
 | Symptom | Action |
 | --- | --- |
+| DSH install/reinstall reports a missing npm metadata or cache blob | This can be a local package-manager cache inconsistency rather than an invalid Toollery package. If the message names npm, close DSH, run `npm cache clean --force` in PowerShell, reopen DSH, and retry. This clears npm's cache, not Toollery's API settings or manual cache. If DSH still reports a cache error, install the current release `.tgz` and include the exact message when reporting it. |
 | No Toollery controls/command | Confirm the bundle is enabled in this profile, restart DSH and start a new native conversation. Install the built release `.tgz`, not the raw `plugin/` source directory. |
+| `Worker setup failed` immediately after upgrading from 0.2.1 | A 0.2.2 Desktop upgrade could retain old Toollery distribution metadata in the profile-local pip-free venv. Upgrade to a release containing the worker-upgrade fix and retry **Set up local worker**. Setup is offline and does not request an API key; the key is used only for later manual generation. Existing configuration and manuals are retained. |
 | `needs_setup` | Use **Set up local worker** or `/toollery setup`. Python 3.12+ with venv/pip must be available; set `TOOLLERY_PYTHON` to an absolute executable path if discovery fails. |
 | `needs_preparation` | Edit `manual-generator.json` and `.env` in the directory shown by status, then select **Generate missing manuals (uses API)** or `/toollery prepare`. This permits generation charges. |
 | Credentials/configuration changed | Saving the plugin form rechecks readiness without restart or generation. Key-only changes reuse manuals; model/endpoint changes may require regeneration. Restart after manual file edits. DSH's chat credentials are separate. |

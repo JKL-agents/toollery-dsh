@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.3 - 2026-10-24
+
+- Fix Desktop worker setup when upgrading an existing pip-free profile venv: remove only stale Toollery files/metadata before installing the new bundled wheel, and report the failed setup stage.
+- Document recovery for local npm metadata/cache-blob errors during plugin reinstall.
+
 ## Unreleased
 
 ## 0.2.2 - 2026-10-23

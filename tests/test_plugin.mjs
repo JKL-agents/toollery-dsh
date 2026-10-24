@@ -1,12 +1,13 @@
 // Run after scripts/build_plugin.py; exercises the shipped worker without a DSH SDK.
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync, mkdirSync } from 'node:fs'
+import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync, mkdirSync, readdirSync } from 'node:fs'
 import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { ToolleryService } from '../build/plugin/service.mjs'
+import { clearBundledWorkerTarget } from '../build/plugin/setup-worker.mjs'
 
 const tools = [
   { name: 'add', description: 'Add numbers and return their sum', parameters: { type: 'object' } },
@@ -21,6 +22,25 @@ async function until(fn, timeoutMs = 60000, diagnostic = async () => '') {
   }
   throw new Error(`Timed out waiting for worker state${await diagnostic()}`)
 }
+
+test('bundled worker upgrade clears only stale Toollery files and metadata', () => {
+  const directory = mkdtempSync(join(tmpdir(), 'toollery bundled upgrade '))
+  try {
+    const sitePackages = join(directory, 'site-packages')
+    for (const name of ['toollery', 'toollery_dsh', 'toollery_dsh-0.2.1.dist-info', 'another_package']) {
+      mkdirSync(join(sitePackages, name), { recursive: true })
+      writeFileSync(join(sitePackages, name, 'marker.txt'), name)
+    }
+    const scripts = join(sitePackages, 'bin')
+    mkdirSync(scripts)
+    writeFileSync(join(scripts, 'toollery-dsh.exe'), 'old tool entry point')
+    writeFileSync(join(scripts, 'unrelated.exe'), 'keep')
+    clearBundledWorkerTarget(sitePackages)
+    assert.deepEqual(readdirSync(sitePackages).sort(), ['another_package', 'bin'])
+    assert.deepEqual(readdirSync(scripts), ['unrelated.exe'])
+    assert.equal(existsSync(join(sitePackages, 'another_package', 'marker.txt')), true)
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
 
 test('shipped bundle setup, explicit preparation, current selections, failure/OFF, restart and disposal', { timeout: 120000 }, async () => {
   const directory = mkdtempSync(join(tmpdir(), 'toollery plugin '))

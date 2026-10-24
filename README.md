@@ -22,6 +22,8 @@ Open **Plugins → Add plugin → Install a third-party plugin** and enter:
 
 No terminal or `.env` editing is required. The plugin adds no demo tools. First preparation may take time for large pools; progress and an approximate ETA are shown.
 
+**If DSH reports a missing npm metadata/cache blob while installing or reinstalling the plugin**, this can be a local package-manager cache inconsistency even when the published package is valid. If the message names npm, close DSH, run `npm cache clean --force` in PowerShell, restart DSH and retry. This clears npm's cache, not Toollery's profile data or API settings. If DSH still reports a cache error, install the `.tgz` from the [latest GitHub release](https://github.com/JKL-agents/toollery-dsh/releases/latest) and include the exact error when reporting it; see [troubleshooting](docs/troubleshooting.md#existing-profile-plugin).
+
 Desktop installation has been reported successful by the maintainer and a colleague on another computer. The local compatibility target is **DSH Desktop 0.12.1 / DSH runtime 0.2.1-rc.2**; see the [verification summary](docs/verification.md) for scope.
 
 For **CLI installation, pinned `.tgz` releases, upgrades and removal**, see the [plugin guide](docs/plugin.md). npm resolves the current published package; downloadable bundles are on the [latest GitHub release](https://github.com/JKL-agents/toollery-dsh/releases/latest).
