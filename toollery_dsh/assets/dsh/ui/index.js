@@ -21,7 +21,7 @@ export function apply(ctx, config = {}) {
           return send(400, { error: 'Session required' })
         }
         if (options !== undefined && (!options || Array.isArray(options)
-            || Object.keys(options).some(key => !['enabled', 'representation', 'budget', 'k'].includes(key)))) {
+            || Object.keys(options).some(key => !['enabled', 'representation', 'budget', 'k', 'retrieval_target'].includes(key)))) {
           return send(400, { error: 'Invalid settings' })
         }
         if (action !== undefined && (!managed || !['setup', 'prepare', 'save_generator'].includes(action) || options !== undefined)) {

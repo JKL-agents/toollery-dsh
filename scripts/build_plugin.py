@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tarfile
 import tomllib
+import zipfile
 
 
 def build(root, *, build_wheel=False):
@@ -20,13 +21,24 @@ def build(root, *, build_wheel=False):
     wheel = root / 'dist' / f'toollery_dsh-{version}-py3-none-any.whl'
     if not wheel.is_file():
         raise FileNotFoundError('Build the Python wheel first, or pass --build-wheel')
+    # The npm package embeds this wheel. Reject a stale one instead of shipping
+    # updated JavaScript alongside an older Python worker.
+    with zipfile.ZipFile(wheel) as archive:
+        packaged = set(archive.namelist())
+        for package in ('toollery', 'toollery_dsh'):
+            for source in (root / package).rglob('*.py'):
+                if '__pycache__' in source.parts:
+                    continue
+                name = source.relative_to(root).as_posix()
+                if name not in packaged or archive.read(name) != source.read_bytes():
+                    raise ValueError(f'Stale Python wheel at {name}; rerun with --build-wheel')
     stage = root / 'build' / 'plugin'
     if stage.exists():
         shutil.rmtree(stage)
     shutil.copytree(root / 'plugin', stage)
     assets = root / 'toollery_dsh/assets/dsh'
     (stage / 'shared').mkdir()
-    for name in ('toollery.mjs', 'sources.mjs'):
+    for name in ('toollery.mjs', 'sources.mjs', 'skills.mjs'):
         shutil.copyfile(assets / name, stage / 'shared' / name)
     shutil.copytree(assets / 'ui', stage / 'ui', ignore=shutil.ignore_patterns('package.json'))
     client = stage / 'ui/client.js'

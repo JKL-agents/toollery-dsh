@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 - 2026-10-25
+
+- Add native DSH skill adaptation with separate `tools`, `skills` and `both` retrieval targets. Skills mode ranks the host's current skill metadata with local BM25 and keeps the full host-eligible tool pool available to DSH.
+- Preserve DSH ownership of skill bodies, loading, permissions and execution. Explicit skill names receive priority, top-k selections are deduplicated and bounded, and selection stays frozen across the model steps of a turn.
+- Add a collision-resistant sample catalog of 95 `sample-*` skills for metadata-routing and native body-loading demonstrations, with attribution and workflow limitations documented.
+- Improve skill-aware UI status: show the target, skill candidate counts, applied/latest k values and the metadata retrieval method; disable the tool representation control when it has no effect.
+- Add packaged skill UI/worker tests and real native-host lifecycle coverage, including catalog suppression/resumption, host restrictions, All/OFF transitions and retained tool visibility.
+- Automatically perform safe offline worker setup on startup when DSH's bundled or an existing Python is available; retain explicit setup for retry and private-runtime consent.
+
+See [the v0.3.0 release notes](docs/release-notes-v0.3.0.md) for scope and known limits.
+
 ## 0.2.3 - 2026-10-24
 
 - Fix Desktop worker setup when upgrading an existing pip-free profile venv: remove only stale Toollery files/metadata before installing the new bundled wheel, and report the failed setup stage.

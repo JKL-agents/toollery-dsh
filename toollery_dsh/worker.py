@@ -10,6 +10,7 @@ import subprocess
 import os
 import secrets
 import time
+import re
 
 from toollery.adapters.dsh import DSHBridge, StaleRefresh, diff_pools, snapshot_pool
 from toollery.data import ToolPool, ToolRecord
@@ -28,6 +29,7 @@ def initialize(directory):
         'manual-generator.json': json.dumps(default_generator(), indent=2) + '\n',
         'settings.json': json.dumps({'representation': 'spec_manual', 'budget': 'top_k',
                                      'k': 3, 'workers': 8, 'enabled': True,
+                                     'retrieval_target': 'tools',
                                      'refresh_max_misses': 15}, indent=2) + '\n',
         '.env.example': '# Manual generation only. Chat credentials belong to DSH.\nTOOLLERY_MANUAL_API_KEY=\n',
     }
@@ -58,15 +60,18 @@ class WorkerBridge(DSHBridge):
         self.refresh_jobs = {}
         self.pending_refreshes = {}
         self.discovery_jobs = {}
+        self.skill_indexes = {}
         self.discovery_catalog = self.home / 'discovery-catalog.json'
         self.preparation_lock = threading.Lock()
         super().__init__(self.home / 'runs', enabled=False, state_dir=self.home / 'sessions',
                          representation=settings.get('representation', 'spec_manual'),
                          budget=settings.get('budget', 'top_k'), k=settings.get('k', 3),
+                         retrieval_target=settings.get('retrieval_target', 'tools'),
                          handlers={'/prepare': self.request_preparation, '/release': self.release,
                                    '/generator': self.generator_settings, '/refresh': self.request_refresh,
                                    '/refresh-status': self.refresh_status, '/discover': self.request_discovery,
-                                   '/discover-status': self.discovery_status})
+                                   '/discover-status': self.discovery_status, '/skill-search': self.request_skill_search,
+                                   '/skill-observed': self.observe_skill})
 
     def generator_settings(self, payload):
         with self._lock:
@@ -497,6 +502,83 @@ class WorkerBridge(DSHBridge):
             'selected_candidates': [pool.tools[hit.tool_id].documentation for hit in ranked],
             'manual_report': report, 'catalog_path': str(self.discovery_catalog),
         }
+
+    def request_skill_search(self, payload):
+        """Search invocation-neutral skill metadata; never loads skill bodies."""
+        prompt = payload.get('prompt')
+        candidates = payload.get('candidates')
+        if not isinstance(prompt, str) or not prompt.strip():
+            raise ValueError('A skill search prompt is required')
+        if not isinstance(candidates, list) or len(candidates) > 4096:
+            raise ValueError('Skill metadata must contain 0..4096 candidates')
+        normalized, documents, seen = [], {}, set()
+        for item in candidates:
+            if not isinstance(item, dict) or not isinstance(item.get('name'), str) or not item['name'].strip():
+                raise ValueError('Invalid skill metadata')
+            name = item['name'].strip()
+            if name in seen:
+                raise ValueError('Skill metadata names must be unique')
+            description = item.get('description')
+            # Native DSH permits skills with no description; their names still
+            # provide useful routing terms. An empty eligible pool is valid too.
+            if not isinstance(description, str):
+                raise ValueError('Skill metadata descriptions must be strings')
+            seen.add(name)
+            record = {'name': name, 'description': description}
+            for key in ('when_to_use', 'tags'):
+                if key in item and item[key] is not None:
+                    record[key] = item[key]
+            normalized.append(record)
+            tags = record.get('tags', '')
+            if isinstance(tags, list): tags = ' '.join(str(value) for value in tags)
+            # Repeat the stable skill name so a direct capability/name match
+            # has more influence than a common word in a long description.
+            documents[name] = '\n'.join(value for value in (name, name, name, description,
+                                                               record.get('when_to_use', ''), str(tags)) if value)
+        key = digest(normalized)
+        budget, k = payload.get('budget', 'top_k'), payload.get('k', 3)
+        self.validate_options('spec', budget, k)
+        with self._lock:
+            index = self.skill_indexes.get(key)
+            if index is None and documents:
+                index = BM25Index(documents)
+                self.skill_indexes[key] = index
+                if len(self.skill_indexes) > 8:
+                    self.skill_indexes.pop(next(iter(self.skill_indexes)))
+        metadata = {item['name']: item for item in normalized}
+        # If the user names an available skill exactly, keep it in the result
+        # even when generic terms in other descriptions score higher. BM25
+        # orders the remaining slots; exact matches also respect the k budget.
+        exact = [item['name'] for item in normalized
+                 if re.search(r'(?<![a-z0-9_-])' + re.escape(item['name'].casefold())
+                             + r'(?![a-z0-9_-])', prompt.casefold())]
+        started = time.perf_counter()
+        if budget == 'all':
+            ranked = index.search(prompt, limit=None) if index is not None else []
+        else:
+            exact = exact[:k]
+            # Fetch k before deduplication: exact matches can also occur among
+            # the BM25 hits, and must not consume the remaining slots twice.
+            ranked = index.search(prompt, limit=k) if index is not None and k > len(exact) else []
+        exact_scores = {hit.tool_id: hit.score for hit in
+                        index.search(prompt, limit=len(exact), eligible_ids=exact)} if exact else {}
+        exact_hits = [{'name': name, 'description': metadata[name]['description'],
+                       **({'when_to_use': metadata[name]['when_to_use']} if 'when_to_use' in metadata[name] else {}),
+                       **({'tags': metadata[name]['tags']} if 'tags' in metadata[name] else {}),
+                       'score': exact_scores.get(name, 0.0), 'exact_name_match': True} for name in exact]
+        selected = exact_hits
+        selected_names = set(exact)
+        selected.extend({**metadata[hit.tool_id], 'score': hit.score}
+                        for hit in ranked if hit.tool_id not in selected_names
+                        and (budget == 'all' or len(selected) < k))
+        # BM25 may return fewer than k positive-score hits; preserve its normal
+        # top-k behavior and do not pad with zero-score skills.
+        return {'status': 'ranked', 'prompt': prompt, 'budget': budget, 'k': k,
+                'candidate_count': len(normalized), 'catalog_hash': key,
+                'selection': {'method': 'metadata_bm25_exact_name' if exact else 'metadata_bm25',
+                              'candidate_count': len(normalized), 'k': k},
+                'selected_names': [item['name'] for item in selected], 'selected': selected,
+                'retrieval_ms': (time.perf_counter() - started) * 1000}
 
     def _refresh(self, job, target, payload):
         session_id = job['session_id']

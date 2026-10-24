@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline'
 import { randomUUID, createHash } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { isDeepStrictEqual } from 'node:util'
-import { setupWorker, workerVersion } from './setup-worker.mjs'
+import { bundledWorker, setupWorker, workerVersion } from './setup-worker.mjs'
 
 function isTimeout(error) {
   return error?.name === 'TimeoutError' || error?.code === 'ETIMEDOUT'
@@ -32,14 +32,23 @@ export class ToolleryService {
     this.phase = 'needs_setup'
     const file = join(this.directory, 'worker.json')
     if (!existsSync(file)) return
-    let executable, version
-    try { ({ python: executable, version } = JSON.parse(readFileSync(file, 'utf8'))) } catch { /* Report a local setup error below. */ }
+    let executable, version, wheel_sha256
+    try { ({ python: executable, version, wheel_sha256 } = JSON.parse(readFileSync(file, 'utf8'))) } catch { /* Report a local setup error below. */ }
     if (typeof executable !== 'string' || !executable) {
       this.message = 'Invalid worker.json. Run worker setup again.'
       return
     }
     if (version !== workerVersion) {
       this.message = 'Worker version does not match this plugin. Run worker setup again; cache and configuration are preserved.'
+      return
+    }
+    try {
+      if (wheel_sha256 !== bundledWorker().sha256) {
+        this.message = 'Worker content does not match this plugin. Run worker setup again; cache and configuration are preserved.'
+        return
+      }
+    } catch {
+      this.message = 'Bundled worker wheel is unavailable. Reinstall the plugin package, then run worker setup.'
       return
     }
     this.phase = 'starting'
@@ -131,7 +140,8 @@ export class ToolleryService {
   }
   async register(id, schemas) {
     this.sessions.set(id, { schemas: structuredClone(schemas), enabled: false, turns: [], localTurns: [],
-      localOff: existsSync(this.offFile(id)), phase: 'needs_preparation', pool_revision: 0 })
+      localOff: existsSync(this.offFile(id)), phase: 'needs_preparation', pool_revision: 0,
+      retrieval_target: 'tools' })
     if (this.transport) await this.capture(id)
     return {}
   }
@@ -190,9 +200,10 @@ export class ToolleryService {
     try { await this.settings(id) } catch (failure) { error = failure.message }
     const turns = [...(state.turns || []), ...(state.localTurns || [])].sort((a, b) => (a.turn ?? 0) - (b.turn ?? 0))
     return {
-      enabled: state.enabled, ready: !state.enabled || !!state.retrieval_ready,
+      enabled: state.enabled, ready: state.retrieval_target === 'skills' || !state.enabled || !!state.retrieval_ready,
       retrieval_ready: !!state.retrieval_ready, representation: state.representation || 'spec_manual',
       budget: state.budget || 'top_k', k: state.k || 3,
+      retrieval_target: state.retrieval_target || 'tools',
       tool_count: state.tool_count ?? state.schemas?.length ?? 0,
       tool_names: state.tool_names ?? state.schemas?.map(tool => tool.name) ?? [],
       manuals_valid: state.manuals_valid || 0, manuals_prepared: state.manuals_prepared,
@@ -295,6 +306,28 @@ export class ToolleryService {
   }
 
   discoverCandidates(...args) { return this.rankCandidates(...args) }
+
+  /**
+   * Rank DSH skill metadata without loading skill bodies or generating manuals.
+   * The host remains responsible for loading the selected skills through its
+   * normal skill service after this metadata-only projection.
+   */
+  async rankSkills(id, prompt, summaries, options = {}, signal) {
+    if (!Array.isArray(summaries)) throw new Error('Skill summaries must be an array.')
+    return this.post('/skill-search', { session_id: id, prompt, candidates: summaries,
+      budget: options.budget || 'top_k', k: options.k || 3 }, signal)
+  }
+
+  async recordSkillSelection(payload) {
+    const state = this.sessions.get(payload.session_id)
+    const local = state?.localTurns?.find(item => item.selection_id === payload.selection_id)
+    if (local) {
+      Object.assign(local, { skill_selected_names: [...(payload.selected_names || [])],
+        skill_candidate_count: payload.candidate_count, skill_retrieval_ms: payload.retrieval_ms })
+      return
+    }
+    await this.post('/skill-observed', payload)
+  }
 
   async reconcile(id, source, signal, { maxAutoTools, allowGeneration = false, representation,
     timeoutMs = this.refreshTimeoutMs } = {}) {
@@ -414,13 +447,15 @@ export class ToolleryService {
     throw new Error('Tool pool kept changing during refresh.')
   }
 
-  bypass(id, schemas, turn, options = {}) {
+  bypass(id, schemas, turn, options = {}, hostSchemas) {
     const state = this.sessions.get(id)
-    const record = { session_id: id, selection_id: randomUUID(), turn, enabled: false,
+    const record = { session_id: id, selection_id: randomUUID(), turn, enabled: options.enabled === true,
       representation: options.representation || state.representation || 'spec_manual',
       budget: options.budget || state.budget || 'top_k', k: options.k || state.k || 3,
+      retrieval_target: options.retrieval_target || state.retrieval_target || 'tools',
       selected_names: schemas.map(tool => tool.name), model_tool_names: schemas.map(tool => tool.name),
-      full_pool_count: state.schemas.length, eligible_pool_count: schemas.length, retrieval_ms: 0,
+      full_pool_count: new Set([...(hostSchemas || state.schemas), ...schemas].map(tool => tool.name)).size,
+      eligible_pool_count: schemas.length, retrieval_ms: 0,
       tool_details: schemas.map(({ name, description }) => ({ name, description })), calls: [] }
     state.localTurns.push(record)
     state.last_selection = record

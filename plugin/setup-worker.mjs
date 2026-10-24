@@ -1,11 +1,20 @@
 // Explicit user action, never an npm install/prepare hook. No shell commands.
 import { spawn } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { managedPython } from './managed-python.mjs'
 
 export const workerVersion = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version
+
+export function bundledWorker() {
+  const wheelDir = fileURLToPath(new URL('./worker/', import.meta.url))
+  const wheels = readdirSync(wheelDir).filter(name => /^toollery_dsh-.*-py3-none-any\.whl$/.test(name))
+  if (wheels.length !== 1) throw new Error('The plugin must contain exactly one worker wheel. Use a built release bundle.')
+  const path = join(wheelDir, wheels[0])
+  return { path, sha256: createHash('sha256').update(readFileSync(path)).digest('hex') }
+}
 
 export function clearBundledWorkerTarget(sitePackages) {
   mkdirSync(sitePackages, { recursive: true })
@@ -89,14 +98,12 @@ export async function setupWorker(directory, python, progress = () => {}, { allo
       else await run(interpreter[0], [...interpreter.slice(1), '-I', '-m', 'venv', venv], { cwd: home, stage: 'creating the profile-local Python environment' })
     }
     await run(executable, ['-I', '-c', 'import sys; assert sys.version_info >= (3,12)'], { cwd: home })
-    const wheelDir = fileURLToPath(new URL('./worker/', import.meta.url))
-    const wheels = readdirSync(wheelDir).filter(name => /^toollery_dsh-.*-py3-none-any\.whl$/.test(name))
-    if (wheels.length !== 1) throw new Error('The plugin must contain exactly one worker wheel. Use a built release bundle.')
+    const wheel = bundledWorker()
     progress('Installing the bundled worker (offline; no DSH runtime)')
     // Do not let checkout metadata, PYTHONPATH or user pip configuration redirect
     // installation. Reinstall even at the same version during explicit setup.
     if (managed) {
-      await run(managed.uv, ['--no-config', 'pip', 'install', '--python', executable, '--no-index', '--no-deps', '--reinstall', join(wheelDir, wheels[0])], { cwd: home, env: managed.env })
+      await run(managed.uv, ['--no-config', 'pip', 'install', '--python', executable, '--no-index', '--no-deps', '--reinstall', wheel.path], { cwd: home, env: managed.env })
     } else if (useBundled) {
       // Desktop's primary runtime intentionally omits ensurepip. Its bundled
       // pip can still install the wheel offline into the private venv. pip's
@@ -106,17 +113,17 @@ export async function setupWorker(directory, python, progress = () => {}, { allo
         ? join(venv, 'Lib', 'site-packages')
         : join(venv, 'lib', 'python3.12', 'site-packages')
       clearBundledWorkerTarget(sitePackages)
-      await run(interpreter[0], ['-I', '-m', 'pip', '--isolated', 'install', '--no-index', '--no-deps', '--target', sitePackages, '--force-reinstall', join(wheelDir, wheels[0])], { cwd: home, stage: 'installing the bundled worker' })
+      await run(interpreter[0], ['-I', '-m', 'pip', '--isolated', 'install', '--no-index', '--no-deps', '--target', sitePackages, '--force-reinstall', wheel.path], { cwd: home, stage: 'installing the bundled worker' })
     } else {
       // A previous setup may have created a private uv venv without pip.
       try { await run(executable, ['-I', '-m', 'ensurepip'], { cwd: home, stage: 'bootstrapping pip in the profile-local environment' }) } catch { /* pip below gives the supported setup diagnostic. */ }
-      await run(executable, ['-I', '-m', 'pip', '--isolated', 'install', '--no-index', '--no-deps', '--force-reinstall', join(wheelDir, wheels[0])], { cwd: home, stage: 'installing the bundled worker' })
+      await run(executable, ['-I', '-m', 'pip', '--isolated', 'install', '--no-index', '--no-deps', '--force-reinstall', wheel.path], { cwd: home, stage: 'installing the bundled worker' })
     }
     await run(executable, ['-I', '-c',
       'import sys; from pathlib import Path; from importlib.metadata import version; import toollery_dsh.worker as w; assert version("toollery-dsh") == sys.argv[2]; assert Path(w.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()); w.initialize(sys.argv[1])',
       home, workerVersion], { cwd: home, stage: 'validating the installed worker version and location' })
     const pending = join(home, 'worker.json.tmp')
-    writeFileSync(pending, JSON.stringify({ python: executable, version: workerVersion }, null, 2) + '\n')
+    writeFileSync(pending, JSON.stringify({ python: executable, version: workerVersion, wheel_sha256: wheel.sha256 }, null, 2) + '\n')
     renameSync(pending, join(home, 'worker.json'))
     return executable
   } finally { rmSync(lock, { recursive: true }) }
