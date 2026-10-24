@@ -20,7 +20,7 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m unittest discover -s tests -v
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          node --test tests/test_dsh_snapshot.mjs tests/test_dsh_sources.mjs tests/test_dsh_ui.mjs tests/test_dsh_launcher.mjs tests/test_dsh_lifecycle.mjs tests/test_discovery_example.mjs
+          node --test tests/test_dsh_snapshot.mjs tests/test_dsh_sources.mjs tests/test_dsh_ui.mjs tests/test_dsh_launcher.mjs tests/test_dsh_lifecycle.mjs tests/test_discovery_example.mjs tests/test_skill_ui.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           python -m build
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

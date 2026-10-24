@@ -6,8 +6,12 @@ import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { Readable } from 'node:stream'
 import { ToolleryService } from '../build/plugin/service.mjs'
+import { apply as applyUI } from '../build/plugin/ui/index.js'
 import { clearBundledWorkerTarget } from '../build/plugin/setup-worker.mjs'
+import { projectSkillCatalog, skillCandidates } from '../build/plugin/shared/skills.mjs'
+import { registerSampleSkills } from '../build/plugin/sample-skill-provider.mjs'
 
 const tools = [
   { name: 'add', description: 'Add numbers and return their sum', parameters: { type: 'object' } },
@@ -42,6 +46,63 @@ test('bundled worker upgrade clears only stale Toollery files and metadata', () 
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })
 
+test('skill projection keeps metadata only and preserves the native loader catalog shape', () => {
+  const summaries = skillCandidates([
+    { name: 'office-xlsx', description: 'Work with spreadsheets', whenToUse: 'Use for charts', invocation: { modelInvocable: true } },
+    { name: 'private-skill', description: 'Do not expose', invocation: { modelInvocable: false } },
+  ])
+  assert.deepEqual(summaries.map(item => item.name), ['office-xlsx'])
+  const message = { content: [{ type: 'text', text: 'full catalog' }], source: {
+    kind: 'skill-catalog', entries: [{ name: 'office-xlsx', description: 'Work with spreadsheets' },
+      { name: 'office-docs', description: 'Work with documents' }], update: true,
+  } }
+  const projected = projectSkillCatalog(message, ['office-xlsx'])
+  assert.deepEqual(projected.source.entries.map(item => item.name), ['office-xlsx'])
+  assert.match(projected.content[0].text, /office-xlsx/)
+  assert.doesNotMatch(projected.content[0].text, /office-docs/)
+  assert.equal(projected.source.toolleryProjected, true)
+})
+
+test('bundled sample skills are discoverable through DSH native skill provider', async () => {
+  let provider
+  registerSampleSkills({ skills: { registerProvider(factory) { provider = factory() } } })
+  const candidates = await provider.list()
+  assert.ok(candidates.length >= 90 && candidates.length <= 110, `expected about 100 bundled samples, got ${candidates.length}`)
+  assert.ok(candidates.every(candidate => candidate.name.startsWith('sample-')))
+  assert.ok(candidates.every(candidate => typeof candidate.rank === 'number' && Number.isFinite(candidate.rank)))
+  assert.ok(candidates.every(candidate => candidate.provider === 'toollery-sample-skills'
+    && typeof candidate.description === 'string' && candidate.description.length > 0))
+  assert.equal(candidates.some(candidate => /office/i.test(candidate.name)), false)
+  const selected = candidates.find(candidate => candidate.name === 'sample-meeting-minutes')
+  assert.ok(selected)
+  const loaded = await provider.get(selected)
+  assert.equal(loaded.rank, undefined)
+  assert.match(loaded.content, /action items/i)
+  assert.equal(loaded.content.startsWith('---'), false)
+})
+
+test('packaged skill search fills exact-name overlap and respects the k budget over JSON transport', { timeout: 60000 }, async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'toollery skill budget '))
+  const service = new ToolleryService(directory, { python: process.env.TOOLLERY_TEST_PYTHON || 'python' })
+  try {
+    await service.setup()
+    assert.equal(service.phase, 'ready', service.message)
+    const candidates = Array.from({ length: 25 }, (_, i) => ({ name: `skill-${i}`, description: 'meeting notes and action items' }))
+    for (const k of [10, 20]) {
+      const result = await service.rankSkills('test', 'Use skill-0 for meeting notes', candidates, { k })
+      assert.equal(result.selected_names.length, k)
+      assert.equal(new Set(result.selected_names).size, k)
+      assert.equal(result.selected_names[0], 'skill-0')
+      assert.ok(result.selected.every(item => Number.isFinite(item.score)))
+    }
+    const limited = await service.rankSkills('test', 'Use skill-0 and skill-1', candidates, { k: 1 })
+    assert.equal(limited.selected_names.length, 1)
+  } finally {
+    await service.dispose()
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 test('shipped bundle setup, explicit preparation, current selections, failure/OFF, restart and disposal', { timeout: 120000 }, async () => {
   const directory = mkdtempSync(join(tmpdir(), 'toollery plugin '))
   const service = new ToolleryService(directory, { python: process.env.TOOLLERY_TEST_PYTHON || 'python' })
@@ -61,6 +122,7 @@ test('shipped bundle setup, explicit preparation, current selections, failure/OF
     assert.equal(service.phase, 'ready', service.message)
     assert.ok(existsSync(join(directory, 'manual-generator.json')))
     const worker = JSON.parse(readFileSync(join(directory, 'worker.json'), 'utf8'))
+    assert.match(worker.wheel_sha256, /^[0-9a-f]{64}$/)
     const probe = spawnSync(worker.python, ['-I', '-c',
       'import json, sys; from pathlib import Path; import importlib.metadata as m; import toollery_dsh.worker as w; print(json.dumps({"version": m.version("toollery-dsh"), "private": Path(w.__file__).resolve().is_relative_to(Path(sys.prefix).resolve()), "packages": sorted(d.metadata["Name"] for d in m.distributions())}))'],
       { cwd: directory, encoding: 'utf8', windowsHide: true })
@@ -72,6 +134,19 @@ test('shipped bundle setup, explicit preparation, current selections, failure/OF
     assert.equal(existsSync(process.env.PIP_TARGET), false)
     await until(async () => (await service.status('native')).phase === 'needs_preparation')
     assert.equal((await service.status('native')).manuals_valid, 0)
+    // Exercise the shipped UI route and worker, including the settings allowlist.
+    let uiHandler
+    applyUI({ effect: fn => fn(), connection: { admit: () => ({ peer: {} }) },
+      webServer: { register: route => { uiHandler = route.handler; return () => {} } },
+    }, { managed: true, service })
+    for (const target of ['skills', 'both', 'tools']) {
+      const request = Readable.from([JSON.stringify({ session_id: 'native', options: { retrieval_target: target } })])
+      request.method = 'POST'
+      const response = { writeHead(code) { this.code = code }, end(body) { this.body = JSON.parse(body) } }
+      await uiHandler(request, response)
+      assert.equal(response.code, 200, JSON.stringify(response.body))
+      assert.equal(response.body.retrieval_target, target)
+    }
     writeFileSync(join(directory, 'manual-generator.json'), JSON.stringify({ provider: 'mock' }))
     await service.configure('native', { enabled: false })
     await service.prepare('native')
@@ -205,6 +280,16 @@ test('shipped bundle setup, explicit preparation, current selections, failure/OF
     await until(async () => (await service.status('api')).phase === 'ready')
     assert.equal(calls, 8)
     await service.stop()
+    writeFileSync(join(directory, 'worker.json'), JSON.stringify({ python: worker.python, version: worker.version }))
+    await service.start()
+    assert.equal(service.child, null)
+    assert.equal(service.phase, 'needs_setup')
+    assert.match(service.message, /content.*setup/i)
+    writeFileSync(join(directory, 'worker.json'), JSON.stringify({ ...worker, wheel_sha256: '0'.repeat(64) }))
+    await service.start()
+    assert.equal(service.child, null)
+    assert.equal(service.phase, 'needs_setup')
+    assert.match(service.message, /content.*setup/i)
     writeFileSync(join(directory, 'worker.json'), JSON.stringify({ ...worker, version: 'old-version' }))
     await service.start()
     assert.equal(service.child, null)

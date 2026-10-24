@@ -1,6 +1,6 @@
 # Existing DSH plugin installation
 
-The v0.2 plugin is an official-format DSH bundle. The standalone Windows launcher remains available as a separate demo. Installing the plugin does not install DSH again or replace an existing profile.
+The v0.3 plugin is an official-format DSH bundle. The standalone Windows launcher remains available as a separate demo. Installing the plugin does not install DSH again or replace an existing profile.
 
 ## Install
 
@@ -23,9 +23,9 @@ Download the matching `.tgz` asset from the [latest GitHub release](https://gith
 ### First setup (either installation method)
 
 1. After installing by package name or archive, enable Toollery and restart if DSH requests it.
-2. Open Toollery's plugin details. Select **Set up local worker**. Windows x64 users without Python can first check **Allow private Python download if needed**. The status shows setup stages; the first runtime download may take several minutes. No model calls occur during setup.
-3. In **Manual-generation model**, save your model, OpenAI Chat Completions-compatible API base URL and key. Defaults are `deepseek-flash` and `https://api.deepseek.com`. Saving checks cache readiness without generating manuals.
-4. Start a **new native conversation**. Its Toollery panel shows the full pool and valid/missing manual counts. If DSH is still showing its new-chat landing page, send a harmless greeting to create the session; Toollery remains OFF until ready, and that greeting uses your normal chat API. Check the API/charges confirmation, then select **Generate missing manuals (uses API)**. Tool specifications are sent to the chosen manual provider. Three proxy queries are generated per tool; retries can add requests. Progress is shown while preparation runs.
+2. Toollery checks the worker automatically when the plugin starts. If DSH's bundled Python or an existing Python 3.12+ is available, it installs the embedded worker wheel locally without prompting. If no usable Python is available, open Toollery's plugin details and select **Set up local worker**; Windows x64 users without Python can first check **Allow private Python download if needed**. The status shows setup stages; the first runtime download may take several minutes. No model calls occur during setup.
+3. For tool retrieval or `both`, save your model, OpenAI Chat Completions-compatible API base URL and key in **Manual-generation model**. Defaults are `deepseek-flash` and `https://api.deepseek.com`. Saving checks cache readiness without generating manuals. Skills-only retrieval does not need these credentials.
+4. Start a **new native conversation**. For tool retrieval or `both`, its Toollery panel shows the full pool and valid/missing manual counts; if DSH is still showing its new-chat landing page, send a harmless greeting to create the session, then check the API/charges confirmation and select **Generate missing manuals (uses API)**. Tool specifications are sent to the chosen manual provider. Three proxy queries are generated per tool; retries can add requests. For skills-only retrieval, set Target to `skills` and use the native skill catalog without preparation. Progress is shown while tool preparation runs.
 5. When ready, try a prompt using your existing tools. Inspect selected/called tools, change k, or switch OFF. The plugin adds no toy/demo tools to your agent.
 
 No `.env` editing or standalone launcher is required. Chat remains usable with Toollery OFF while setup is incomplete. An explicit OFF choice remains OFF after preparation; otherwise successful preparation enables the default ON / `spec_manual` / top-k / k=3 configuration.
@@ -43,7 +43,7 @@ For a pinned offline CLI install, replace the package name with the downloaded `
 
 Replace `web` with your existing CLI profile name. Desktop uses an application-owned profile; `--profile desktop` does not select it. Use the normal authenticated DSH URL and workspace/model configuration. The bundle has no npm lifecycle/build scripts; DSH's package manager installs it from npm. The CLI requires its supported Node (22.19+ on 22.x, or 24+) and pnpm environment; Desktop supplies its own.
 
-On DSH Desktop, setup first uses the Desktop-injected absolute path to its installation-owned `office-runtime/primary-runtime` Python. Toollery creates a profile-local venv with that interpreter and installs the embedded worker wheel offline; Desktop's runtime intentionally omits `ensurepip`, so this path uses the bundled pip with `venv --without-pip` and never writes into the Desktop installation. If that payload is unavailable, setup tries version-checked `py -3.12`, `py -3`, then `python` on Windows; Unix uses `python3`, then `python`. Existing Python must be 3.12+ with venv/pip. Alternatively set an absolute `TOOLLERY_PYTHON` path before starting DSH. `/toollery setup` uses existing Python only; private-runtime download consent is provided through the UI.
+On DSH Desktop, automatic setup first uses the Desktop-injected absolute path to its installation-owned `office-runtime/primary-runtime` Python. Toollery creates a profile-local venv with that interpreter and installs the embedded worker wheel offline; Desktop's runtime intentionally omits `ensurepip`, so this path uses the bundled pip with `venv --without-pip` and never writes into the Desktop installation. If that payload is unavailable, setup tries version-checked `py -3.12`, `py -3`, then `python` on Windows; Unix uses `python3`, then `python`. Existing Python must be 3.12+ with venv/pip. Alternatively set an absolute `TOOLLERY_PYTHON` path before starting DSH. Automatic setup uses existing/bundled Python only; private-runtime download requires explicit UI consent. `/toollery setup` remains the manual retry/refresh command.
 
 If explicitly allowed on Windows x64 and no system Python is found, setup downloads pinned uv from GitHub, verifies SHA-256 and installs private Python 3.12.12 under the profile. It does not modify global PATH or system Python. This needs GitHub access and the Windows network/proxy configuration; Windows PowerShell handles the initial download. Other operating systems/architectures require preinstalled Python. An invalid explicitly configured Python path must be corrected instead of silently replaced.
 
@@ -56,6 +56,12 @@ The plugin starts OFF until manuals are ready. With a complete valid cache it au
 ## Provider-owned discovery batches
 
 For a complete optional DSH bundle, installation steps, prompts and skill guidance, see the [candidate-batch discovery example](../examples/dsh/discovery-provider/README.md). It registers `discover_tools` and ranks all six local candidates without adding them to the host registry. Manual generation requires owner configuration; the example is separate from the main npm package.
+
+### Add your own tools and skills
+
+Register tools through DSH's normal MCP/Cordis sources. Toollery captures the current agent's eligible host schemas; it does not discover executors or bypass restrictions. A provider should expose a stable unique name, description, JSON `parameters`, and a host-owned executor. Configure and finish loading the source before creating the conversation; later additions can be reconciled on a later turn.
+
+With DSH's filesystem skill provider, add a direct `<name>/SKILL.md` directory bundle or `<name>.md` file under project `.dsh/skills` / `.agents/skills`, user `~/.dsh/skills` / `~/.agents/skills`, or a configured `customSkillDirs` root. Use YAML frontmatter with required `name` and `description`, plus optional `whenToUse`, `metadata`, `disable-model-invocation`, and `user-invocable`. DSH owns discovery and full-body loading; Toollery sends only the current model-visible summaries to its local skill index. After adding a file, wait for DSH's watcher and use a new turn so the frozen selection is rebuilt.
 
 An optional provider can use the plugin as a local retrieval service when it has fetched a batch of possible tools from its own catalog:
 
@@ -149,6 +155,7 @@ DSH's default addition-only tool-history projection can otherwise retain old dec
 - Settings and selection are frozen per user turn. Additions/schema changes reconcile on the next turn; tools unloaded during a turn are not revived by its frozen selection. Executable behavior changes with identical specs cannot be detected.
 - Cache identity handles new/changed evidence; matching entries are reused. Old entries are not automatically deleted. Toollery observes sources already registered by DSH; it does not reload a source that the host has not refreshed.
 - Provider-owned discovery is an optional ranking API, not an autonomous discovery loop. External batches use an ephemeral index and shared cache without changing the active selection. Same-turn model-facing additions would need a separate explicit selection-epoch transition and are not implemented.
+- On hosts publishing a native skill catalog, Toollery ranks its name/description summaries using metadata-only BM25. It never accesses the skill registry or bodies. The native `skill` declaration remains available within host eligibility, so DSH loads bodies through its own provider. Targets are `tools`, `skills`, and `both`: `skills` keeps all host-eligible tools without tool retrieval or manual preparation; `both` runs both searches independently. Turn records expose selected skills and retrieval time. Catalog selection is frozen per turn and reused across model steps; settings apply next turn. This routes catalog presentation, not skill execution permissions. Hosts without a native catalog retain normal behavior. Skill manuals, dependency expansion and recovery search remain outside this MVP.
 - Latest-text retrieval can omit dependency/follow-up tools. Increase k or turn OFF. These limitations are unchanged by packaging; [experiment evidence](experiments/README.md) is from the earlier standalone integration.
 - Disable/remove the bundle through DSH's Plugins page or `dsh plugin --profile web remove @jkl-agents/dsh-toollery`. If DSH reports restart-required, restart to finish unloading. The worker, guards, prompt sections and UI routes are plugin-owned and cleaned up on unload. Cache/configuration persist.
 - If the worker fails while ON, the turn reports an error. The status UI still allows OFF, which bypasses retrieval without needing the worker. Keys/bridge token are not exposed to the browser. Local runs may contain prompts, tool specifications and results metadata.
@@ -156,7 +163,7 @@ DSH's default addition-only tool-history projection can otherwise retain old dec
 
 ## Upgrade and source builds
 
-Install the new release bundle through the same profile, restart DSH, then run `/toollery setup` to update the embedded worker. A missing/mismatched saved worker version requests setup instead of silently running an old worker. Repeated setup reinstalls the bundled wheel while preserving configuration and cache. Do not delete the profile cache. Incompatible/missing cache entries require explicit preparation.
+Install the new release bundle through the same profile and restart DSH if requested. On startup, Toollery automatically installs the matching embedded worker offline when a usable bundled or existing Python is available. If the worker version or wheel fingerprint is missing/mismatched, use **Set up local worker** or `/toollery setup` as a retry/refresh fallback; configuration and cache are preserved. Repeated setup reinstalls the bundled wheel without deleting the profile cache. Incompatible or missing tool manuals still require explicit preparation.
 
 Maintainers can build the artifact without Node compilation:
 

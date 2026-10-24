@@ -1,6 +1,8 @@
 // Out-of-tree Cordis plugin. Only transport/lifecycle code lives in JavaScript;
 // normalization, generation, versioned caches and retrieval stay in Python.
 import { createSourceBarrier } from './sources.mjs'
+import { randomUUID } from 'node:crypto'
+import { catalogMessage, projectSkillCatalog, skillCandidates, visibleSkillCatalog } from './skills.mjs'
 
 export const name = 'toollery'
 export const inject = ['tools', 'agents', 'systemPrompt']
@@ -30,6 +32,9 @@ export function sameSnapshot(schemas, frozen) {
 
 export function apply(ctx, config = {}) {
   const managed = config.managed ? (config.service || ctx.get('toollery')) : null
+  const residentToolNames = new Set(['skill', ...(Array.isArray(config.residentToolNames) ? config.residentToolNames : [])])
+  // Toollery ranks the native skill catalog published for this agent and
+  // workspace. It never loads skill bodies or reads an unscoped registry.
   const endpoint = process.env.TOOLLERY_BRIDGE_URL
   const token = process.env.TOOLLERY_BRIDGE_TOKEN
   if (!managed && (!endpoint || !token || !/^http:\/\/127\.0\.0\.1:\d+$/.test(endpoint))) {
@@ -68,7 +73,8 @@ export function apply(ctx, config = {}) {
       : await post('/snapshot', { session_id: agent.id, schemas, discovery }, signal)
     const state = { frozen: new Map(structuredClone(schemas).map(tool => [tool.name, tool])),
       snapshot, messages: [], turn: null, turnEpoch: 0, turnOptions: null,
-      selection: null, selectionTask: null, disposers: [] }
+      selection: null, selectionTask: null, skillSelection: null, skillSelectionEpoch: null, skillTask: null,
+      skillCatalog: null, disposers: [] }
     states.set(agent, state)
 
     // Callable schemas describe NOW. Without an explicit temporal contract a
@@ -102,6 +108,9 @@ export function apply(ctx, config = {}) {
         state.turnEpoch += 1
         state.selection = null
         state.selectionTask = null
+        state.skillSelection = null
+        state.skillSelectionEpoch = null
+        state.skillTask = null
         state.turnOptions = null
       }
       state.turn = turn
@@ -163,15 +172,20 @@ export function apply(ctx, config = {}) {
               const status = await managed.settings(agent.id)
               if (selectionEpoch !== state.turnEpoch) throw new Error('Toollery: selection was superseded by a new user turn')
               options = { enabled: status.enabled, representation: status.representation,
-                budget: status.budget, k: status.k }
+                budget: status.budget, k: status.k, retrieval_target: status.retrieval_target || 'tools' }
               state.turnOptions = options
               // OFF is a real bypass, including when the worker is unavailable.
               if (!options.enabled) {
-                state.selection = managed.bypass(agent.id, assembled.tools, selectionTurn, options)
+                state.selection = managed.bypass(agent.id, assembled.tools, selectionTurn, options, ctx.tools.schemas(agent))
                 return state.selection
               }
               // The raw agent scope is the refresh target; assembled.tools is
               // the effective eligible subset after other plugins' policies.
+              if (options.retrieval_target === 'skills') {
+                state.selection = managed.bypass(agent.id, assembled.tools, selectionTurn,
+                  { ...options, enabled: true, retrieval_target: 'skills' }, ctx.tools.schemas(agent))
+                return state.selection
+              }
               await managed.reconcile(agent.id, () => ordered(ctx.tools.schemas(agent)), context.signal,
                 { representation: options.representation })
             } else if (!sameSnapshot(ctx.tools.schemas(agent), state.frozen)
@@ -209,9 +223,13 @@ export function apply(ctx, config = {}) {
         }
       }
       const keep = new Set(state.selection.selected_names)
-      const tools = assembled.tools.filter(tool => keep.has(tool.name))
+      // Keep resident tools only while the host assembly makes them eligible.
+      // Never revive a restricted/unloaded loader from an older snapshot.
+      const tools = state.selection.retrieval_target === 'skills'
+        ? assembled.tools
+        : assembled.tools.filter(tool => keep.has(tool.name) || residentToolNames.has(tool.name))
       state.selection.model_tool_names = tools.map(tool => tool.name)
-      if (state.selection.enabled === false) return { ...assembled, tools }
+      if (state.selection.enabled === false || state.selection.retrieval_target === 'skills') return { ...assembled, tools }
       await post('/observed', {
         session_id: agent.id, selection_id: state.selection.selection_id,
         turn: state.turn, model_tool_names: tools.map(tool => tool.name),
@@ -220,6 +238,67 @@ export function apply(ctx, config = {}) {
       // DSH's normal loop persists this exact schema set in request/header.
       return { ...assembled, tools }
     }, { prepend: true }))
+
+    if (managed) {
+      state.disposers.push(agent.ctx.on('agent/pre-step', async (event, next) => {
+        const epoch = state.turnEpoch
+        const decision = await next()
+        if (epoch !== state.turnEpoch) throw new Error('Toollery: skill selection was superseded by a new user turn')
+        if (decision?.kind === 'reject') return decision
+        const nativeCatalog = catalogMessage(decision?.messages || [])
+        if (nativeCatalog) state.skillCatalog = structuredClone(nativeCatalog)
+        if (state.selection?.enabled === false
+          || !['skills', 'both'].includes(state.turnOptions?.retrieval_target || 'tools')) return decision
+        // Native DSH omits the catalog when its full pool matches history.
+        // Retain that full catalog so all -> top-k and OFF -> ON still rerank.
+        // On a resumed session the first native step can already suppress its
+        // catalog because the visible history matches the full current pool.
+        const catalog = nativeCatalog || state.skillCatalog || visibleSkillCatalog(agent)
+        if (catalog && !state.skillCatalog) state.skillCatalog = structuredClone(catalog)
+        if (!catalog || !state.messages.length || !state.selection?.model_tool_names?.includes('skill')) return decision
+        const current = state.skillTask
+        if (state.skillSelectionEpoch !== epoch && (!current || current.epoch !== epoch)) {
+          const candidates = skillCandidates(catalog.source.entries)
+          const prompt = state.messages.flatMap(message => message.content || [])
+            .filter(block => block?.type === 'text').map(block => block.text).join('\n')
+          const options = state.turnOptions || await managed.settings(agent.id)
+          const promise = managed.rankSkills(agent.id, prompt, candidates, {
+            budget: options.budget, k: options.k, requestId: `skills-${state.turn}-${epoch}`,
+          }, event.signal).then(result => {
+            if (epoch !== state.turnEpoch) throw new Error('Toollery: skill selection was superseded by a new user turn')
+            state.skillSelection = result
+            state.skillSelectionEpoch = epoch
+            return result
+          })
+          state.skillTask = { epoch, promise }
+          promise.finally(() => {
+            if (state.skillTask?.promise === promise) state.skillTask = null
+          }).catch(() => {})
+        }
+        const result = state.skillSelectionEpoch === epoch
+          ? state.skillSelection : await state.skillTask.promise
+        const selected = result?.selected_names || []
+        if (state.selection?.selection_id && typeof managed.recordSkillSelection === 'function') {
+          await managed.recordSkillSelection({ session_id: agent.id, selection_id: state.selection.selection_id,
+            selected_names: selected, candidate_count: result?.candidate_count,
+            retrieval_ms: result?.retrieval_ms })
+        }
+        if (epoch !== state.turnEpoch) throw new Error('Toollery: skill selection was superseded by a new user turn')
+        const previous = visibleSkillCatalog(agent)
+        const projected = projectSkillCatalog({ ...catalog,
+          ...(nativeCatalog ? {} : { id: randomUUID() }),
+          source: { ...catalog.source, ...(previous ? { update: true } : {}) },
+        }, selected)
+        // The native consumer may offer its full catalog every model step
+        // because history contains our subset. Do not repeatedly admit the
+        // same projected subset or lose the native update on the next turn.
+        const unchanged = previous && sameValue(previous.source.entries, projected.source.entries)
+        const messages = decision.messages.flatMap(message => message === nativeCatalog
+          ? (unchanged ? [] : [projected]) : [message])
+        if (!nativeCatalog && !unchanged) messages.push(projected)
+        return { ...decision, messages }
+      }, { prepend: true }))
+    }
   })
   function dispose(agent) {
     const state = states.get(agent)

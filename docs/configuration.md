@@ -1,6 +1,6 @@
 # Configuration
 
-For the **existing-profile plugin**, run `/toollery setup` and use the configuration directory shown by `/toollery status`. It contains `manual-generator.json`, `.env` and `settings.json`; no `toollery.json` is required. Chat models and keys remain configured in DSH. See the [plugin guide](plugin.md).
+For the **existing-profile plugin**, use the configuration directory shown by `/toollery status`. It contains `manual-generator.json`, `.env` and `settings.json`; no `toollery.json` is required. The worker is set up automatically when a bundled or existing Python is available; `/toollery setup` remains the retry command. Chat models and keys remain configured in DSH. See the [plugin guide](plugin.md).
 
 Plugin `settings.json` defaults include `workers: 8` (1–8) and `refresh_max_misses: 15` (0–1,000). The latter limits automatic **cache misses** per refresh; 0 requires approval for each new manual. Configure before starting DSH. The separate Cordis plugin option `refreshTimeoutMs` sets the turn's refresh wait budget (default 120,000 ms; range 1,000–1,800,000). A wait timeout retains the background generation job; it is not provider cancellation. The Web panel displays progress, elapsed time and approximate ETA. Initial preparation remains explicitly authorized regardless of this automatic-refresh limit.
 

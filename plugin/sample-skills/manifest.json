@@ -1,0 +1,477 @@
+[
+  {
+    "id": "add-educational-comments",
+    "source_name": "add-educational-comments",
+    "description": "Add educational comments to the file specified, or prompt asking for file to comment if one is not provided."
+  },
+  {
+    "id": "agent-architecture",
+    "source_name": "agent-architecture",
+    "description": "Design AI agent architectures through requirements discovery, or audit and diagnose architectural flaws in existing agents. Architecture only; excludes implementation and general code review."
+  },
+  {
+    "id": "agent-governance",
+    "source_name": "agent-governance",
+    "description": "Patterns and techniques for adding governance, safety, and trust controls to AI agent systems. Use this skill when: - Building AI agents that call external tools (APIs, databases, file systems) - Implementing policy-based access controls for agent tool usage - Adding semantic intent classification to detect dangerous prompts - Creating trust scoring systems for multi-agent workflows - Building audit trails for agent actions and decisions - Enforcing rate limits, content filters, or tool restrictions on agents - Working with any agent framework (PydanticAI, CrewAI, OpenAI Agents, LangChain, AutoGen)"
+  },
+  {
+    "id": "agent-supply-chain",
+    "source_name": "agent-supply-chain",
+    "description": "Verify supply chain integrity for AI agent plugins, tools, and dependencies. Use this skill when: - Generating SHA-256 integrity manifests for agent plugins or tool packages - Verifying that installed plugins match their published manifests - Detecting tampered, modified, or untracked files in agent tool directories - Auditing dependency pinning and version policies for agent components - Building provenance chains for agent plugin promotion (dev → staging → production) - Any request like \"verify plugin integrity\", \"generate manifest\", \"check supply chain\", or \"sign this plugin\""
+  },
+  {
+    "id": "agentic-eval",
+    "source_name": "agentic-eval",
+    "description": "Patterns and techniques for evaluating and improving AI agent outputs. Use this skill when: - Implementing self-critique and reflection loops - Building evaluator-optimizer pipelines for quality-critical generation - Creating test-driven code refinement workflows - Designing rubric-based or LLM-as-judge evaluation systems - Adding iterative improvement to agent outputs (code, reports, analysis) - Measuring and improving agent response quality"
+  },
+  {
+    "id": "ai-prompt-engineering-safety-review",
+    "source_name": "ai-prompt-engineering-safety-review",
+    "description": "Comprehensive AI prompt engineering safety review and improvement prompt. Analyzes prompts for safety, bias, security vulnerabilities, and effectiveness while providing detailed improvement recommendations with extensive frameworks, testing methodologies, and educational content."
+  },
+  {
+    "id": "ai-ready",
+    "source_name": "ai-ready",
+    "description": "Make any repo AI-ready — analyzes your codebase and generates AGENTS.md, copilot-instructions.md, CI workflows, issue templates, and more. Mines your PR review patterns and creates files customized to your stack. USE THIS SKILL when the user asks to \"make this repo ai-ready\", \"set up AI config\", or \"prepare this repo for AI contributions\"."
+  },
+  {
+    "id": "anti-ui-slop",
+    "source_name": "anti-ui-slop",
+    "description": "Stop coding agents from shipping generic UI. Use UIZZE''s 800,000+ real web and iOS screens to build product-specific interfaces, define a design contract, cover required states, and run a hard finish gate. Use when designing, implementing, redesigning, critiquing, or pre-ship reviewing a web or iOS interface in Codex, Claude Code, Cursor, Copilot, or another coding agent. Trigger with \"anti-ui-slop\", \"stop UI slop\", \"ground this UI in real screens\", or \"run the UI finish gate\"."
+  },
+  {
+    "id": "api-breaking-change-detector",
+    "source_name": "api-breaking-change-detector",
+    "description": "Cross-references C# Web API controllers/DTOs against their TypeScript/JavaScript consumers (React, Angular, Vue, Svelte, Node.js, or hand-written/auto-generated HTTP clients like Fetch, Axios, NSwag) to catch contract drift in both directions: backend changes that break client applications (renamed/removed JSON keys, new required parameters, status code shifts) and frontend code sending fields the backend no longer reads. Works directly against source code, not exported OpenAPI spec files. Use when the user asks to check for breaking API changes, verify frontend/backend contract sync, or audit a DTO/controller change against its TypeScript/JS consumers before merging. Not for generating new API code from a spec (see openapi-to-application-code) or scaffolding new endpoints (see aspnet-minimal-api-openapi)."
+  },
+  {
+    "id": "architecture-blueprint-generator",
+    "source_name": "architecture-blueprint-generator",
+    "description": "Comprehensive project architecture blueprint generator that analyzes codebases to create detailed architectural documentation. Automatically detects technology stacks and architectural patterns, generates visual diagrams, documents implementation patterns, and provides extensible blueprints for maintaining architectural consistency and guiding new development."
+  },
+  {
+    "id": "automate-this",
+    "source_name": "automate-this",
+    "description": "Analyze a screen recording of a manual process and produce targeted, working automation scripts. Extracts frames and audio narration from video files, reconstructs the step-by-step workflow, and proposes automation at multiple complexity levels using tools already installed on the user machine."
+  },
+  {
+    "id": "autoresearch",
+    "source_name": "autoresearch",
+    "description": "Autonomous iterative experimentation loop for any programming task. Guides the user through defining goals, measurable metrics, and scope constraints, then runs an autonomous loop of code changes, testing, measuring, and keeping/discarding results. Inspired by Karpathy''s autoresearch. USE FOR: autonomous improvement, iterative optimization, experiment loop, auto research, performance tuning, automated experimentation, hill climbing, try things automatically, optimize code, run experiments, autonomous coding loop. DO NOT USE FOR: one-shot tasks, simple bug fixes, code review, or tasks without a measurable metric."
+  },
+  {
+    "id": "boost-prompt",
+    "source_name": "boost-prompt",
+    "description": "Interactive prompt refinement workflow: interrogates scope, deliverables, constraints; copies final markdown to clipboard; never writes code. Requires the Joyride extension."
+  },
+  {
+    "id": "brag-sheet",
+    "source_name": "brag-sheet",
+    "description": "Turn vague \"what did I do?\" into evidence-backed impact statements for performance reviews, self-reviews, promotion packets, and weekly updates. Uniquely mines Copilot CLI session logs to reconstruct forgotten work, plus git commits and GitHub PRs. Enforces a 3-part impact contract (action → result → evidence). Works standalone with zero dependencies. Trigger for: \"brag\", \"log work\", \"what did I do\", \"backfill my work history\", \"performance review\", \"self-review\", \"self assessment\", \"write impact statement\", \"review prep\", \"promo packet\", \"promotion case\", \"weekly update\", \"status report\", \"accomplishments\", \"what did I ship\", \"I forgot to log my work\", \"summarize my work\", \"track my wins\", \"what should I highlight\", \"end of half\", \"career growth\", \"work journal\", or any request to document, summarize, or organize work accomplishments."
+  },
+  {
+    "id": "breakdown-epic-pm",
+    "source_name": "breakdown-epic-pm",
+    "description": "Prompt for creating an Epic Product Requirements Document (PRD) for a new epic. This PRD will be used as input for generating a technical architecture specification."
+  },
+  {
+    "id": "breakdown-feature-implementation",
+    "source_name": "breakdown-feature-implementation",
+    "description": "Prompt for creating detailed feature implementation plans, following Epoch monorepo structure."
+  },
+  {
+    "id": "breakdown-feature-prd",
+    "source_name": "breakdown-feature-prd",
+    "description": "Prompt for creating Product Requirements Documents (PRDs) for new features, based on an Epic."
+  },
+  {
+    "id": "breakdown-plan",
+    "source_name": "breakdown-plan",
+    "description": "Issue Planning and Automation prompt that generates comprehensive project plans with Epic > Feature > Story/Enabler > Test hierarchy, dependencies, priorities, and automated tracking."
+  },
+  {
+    "id": "breakdown-test",
+    "source_name": "breakdown-test",
+    "description": "Test Planning and Quality Assurance prompt that generates comprehensive test strategies, task breakdowns, and quality validation plans for GitHub projects."
+  },
+  {
+    "id": "bug-reproduction-brief",
+    "source_name": "bug-reproduction-brief",
+    "description": "Turn a vague, intermittent, or environment-specific bug report into a minimal evidence-backed reproduction before proposing a fix."
+  },
+  {
+    "id": "build-evidence-map",
+    "source_name": "build-evidence-map",
+    "description": "Build an auditable evidence map for a contested technical choice, research synthesis, proposal review, or consequential decision. Use when Copilot must preserve supporting, contradicting, qualifying, and missing evidence with exact source regions instead of collapsing disagreement into prose."
+  },
+  {
+    "id": "cli-mastery",
+    "source_name": "cli-mastery",
+    "description": "Interactive training for the GitHub Copilot CLI. Guided lessons, quizzes, scenario challenges, and a full reference covering slash commands, shortcuts, modes, agents, skills, MCP, and configuration. Say \"cliexpert\" to start."
+  },
+  {
+    "id": "cloud-design-patterns",
+    "source_name": "cloud-design-patterns",
+    "description": "Cloud design patterns for distributed systems architecture covering 42 industry-standard patterns across reliability, performance, messaging, security, and deployment categories. Use when designing, reviewing, or implementing distributed system architectures."
+  },
+  {
+    "id": "code-exemplars-blueprint-generator",
+    "source_name": "code-exemplars-blueprint-generator",
+    "description": "Technology-agnostic prompt generator that creates customizable AI prompts for scanning codebases and identifying high-quality code exemplars. Supports multiple programming languages (.NET, Java, JavaScript, TypeScript, React, Angular, Python) with configurable analysis depth, categorization methods, and documentation formats to establish coding standards and maintain consistency across development teams."
+  },
+  {
+    "id": "code-tour",
+    "source_name": "code-tour",
+    "description": "Use this skill to create CodeTour .tour files — persona-targeted, step-by-step walkthroughs that link to real files and line numbers. Trigger for: \"create a tour\", \"make a code tour\", \"generate a tour\", \"onboarding tour\", \"tour for this PR\", \"tour for this bug\", \"RCA tour\", \"architecture tour\", \"explain how X works\", \"vibe check\", \"PR review tour\", \"contributor guide\", \"help someone ramp up\", or any request for a structured walkthrough through code. Supports 20 developer personas (new joiner, bug fixer, architect, PR reviewer, vibecoder, security reviewer, and more), all CodeTour step types (file/line, selection, pattern, uri, commands, view), and tour-level fields (ref, isPrimary, nextTour). Works with any repository in any language."
+  },
+  {
+    "id": "commit-message-storyteller",
+    "source_name": "commit-message-storyteller",
+    "description": "Analyzes git diffs or staged changes and generates narrative commit messages that explain WHY a change was made, not just what changed — following Conventional Commits format. Use when asked to \"write a commit message\", \"describe my changes\", \"what should I commit this as\", or \"summarize my diff\". Works with git diff output, staged files, or plain descriptions of changes. Does not run git commit; to stage files and make the commit, use the git-commit skill."
+  },
+  {
+    "id": "context-map",
+    "source_name": "context-map",
+    "description": "Generate a map of all files relevant to a task before making changes"
+  },
+  {
+    "id": "conventional-branch",
+    "source_name": "conventional-branch",
+    "description": "Create Git branches following the Conventional Branch specification (feature/, bugfix/, hotfix/, release/, chore/, plus AI agent prefixes ai/, copilot/, cursor/, claude/, codex/). Use when creating a new branch, naming a branch, or checking whether a branch name complies with the spec."
+  },
+  {
+    "id": "conventional-commit",
+    "source_name": "conventional-commit",
+    "description": "Prompt and workflow for generating conventional commit messages using a structured XML format. Guides users to create standardized, descriptive commit messages in line with the Conventional Commits specification, including instructions, examples, and validation."
+  },
+  {
+    "id": "copilot-instructions-blueprint-generator",
+    "source_name": "copilot-instructions-blueprint-generator",
+    "description": "Technology-agnostic blueprint generator for creating comprehensive copilot-instructions.md files that guide GitHub Copilot to produce code consistent with project standards, architecture patterns, and exact technology versions by analyzing existing codebase patterns and avoiding assumptions."
+  },
+  {
+    "id": "create-agentsmd",
+    "source_name": "create-agentsmd",
+    "description": "Prompt for generating an AGENTS.md file for a repository"
+  },
+  {
+    "id": "create-architectural-decision-record",
+    "source_name": "create-architectural-decision-record",
+    "description": "Create an Architectural Decision Record (ADR) document for AI-optimized decision documentation."
+  },
+  {
+    "id": "create-github-action-workflow-specification",
+    "source_name": "create-github-action-workflow-specification",
+    "description": "Create a formal specification for an existing GitHub Actions CI/CD workflow, optimized for AI consumption and workflow maintenance."
+  },
+  {
+    "id": "create-github-issue-feature-from-specification",
+    "source_name": "create-github-issue-feature-from-specification",
+    "description": "Create GitHub Issue for feature request from specification file using feature_request.yml template."
+  },
+  {
+    "id": "create-implementation-plan",
+    "source_name": "create-implementation-plan",
+    "description": "Create a new implementation plan file for new features, refactoring existing code or upgrading packages, design, architecture or infrastructure."
+  },
+  {
+    "id": "create-llms",
+    "source_name": "create-llms",
+    "description": "Create an llms.txt file from scratch based on repository structure following the llms.txt specification at https://llmstxt.org/"
+  },
+  {
+    "id": "create-readme",
+    "source_name": "create-readme",
+    "description": "Create a README.md file for the project"
+  },
+  {
+    "id": "create-specification",
+    "source_name": "create-specification",
+    "description": "Create a new specification file for the solution, optimized for Generative AI consumption."
+  },
+  {
+    "id": "create-technical-spike",
+    "source_name": "create-technical-spike",
+    "description": "Create time-boxed technical spike documents for researching and resolving critical development decisions before implementation."
+  },
+  {
+    "id": "create-tldr-page",
+    "source_name": "create-tldr-page",
+    "description": "Create a tldr page from documentation URLs and command examples, requiring both URL and command name."
+  },
+  {
+    "id": "daily-focus-board",
+    "source_name": "daily-focus-board",
+    "description": "Spin up a personal, motivating daily focus board that renders in a browser canvas and that the user drives by talking to their AI partner. Tasks track status (to-do → in progress → done) with timestamped progress notes and roll up into a \"today''s momentum\" feed; numeric-goal tasks (pages, pomodoros, reps) render as progress-bar counters. Executive-function / neurodivergent-friendly by design: Focus mode, kind \"not today\" carryover (no overdue-shaming), a brain-dump box, reduced-motion, and gentle deadline countdowns. Add, reorder, and relabel tasks live, assign Eisenhower priority (Do first / Schedule / Delegate / Later), open with an above/below-the-line check-in and a daily mantra, and save an end-of-day recap. Use when someone wants to plan their day, stay focused, kick off a work session, or track progress. Progress persists in the browser (localStorage)."
+  },
+  {
+    "id": "daily-prep",
+    "source_name": "daily-prep",
+    "description": "Prepare for tomorrow''s meetings and tasks. Pulls calendar from Outlook via WorkIQ, cross-references open tasks and workspace context, classifies meetings, detects conflicts and day-fit issues, finds learning and deep-work slots, and generates a structured HTML prep file with productivity recommendations."
+  },
+  {
+    "id": "diagnose",
+    "source_name": "diagnose",
+    "description": "Perform a systematic diagnostic scan of an AI workflow across 5 quality dimensions — prompt quality, context efficiency, tool health, architecture fitness, and safety — producing a scored report with prioritized remediation actions."
+  },
+  {
+    "id": "doc-and-modernize",
+    "source_name": "doc-and-modernize",
+    "description": "Two related workflows for a locally-cloned codebase, in one skill. Documentation mode produces a single, comprehensive, verifiable architecture document primarily by reading files on disk (local-first) — use it whenever the user wants to understand, map, document, research, or onboard onto a codebase (\"research this repo\", \"write up the architecture\", \"do an architecture deep dive\", \"document how this codebase works\", \"map the system design\", \"create an onboarding doc\"). Modernization mode generates a phased plan to modernize, migrate, upgrade, or rewrite a legacy system (\"modernize this\", \"plan the migration\", \"how would we rewrite this\", \"how do we get off this legacy stack\"); if no architecture document exists yet it first runs Documentation mode, then continues straight through to the plan. It assumes the legacy stack may be dead, runs a time-boxed feasibility spike, and picks the highest achievable rung on a safety ladder instead of demanding a fully-green legacy CI gate up front."
+  },
+  {
+    "id": "docs-sync-audit",
+    "source_name": "docs-sync-audit",
+    "description": "Run a read-only documentation drift audit for a feature, PR, branch, release, API, configuration change, workflow, CLI, package, or repository area. Use when the user asks whether docs are stale, missing, inconsistent with code, or need updates after code changes. Checks README files, setup guides, API docs, env docs, changelogs, examples, comments, generated docs, and user-facing instructions. This is not a general code review; it compares what the docs claim against what the code does."
+  },
+  {
+    "id": "documentation-writer",
+    "source_name": "documentation-writer",
+    "description": "Diátaxis Documentation Expert. An expert technical writer specializing in creating high-quality software documentation, guided by the principles and structure of the Diátaxis technical documentation authoring framework."
+  },
+  {
+    "id": "doublecheck",
+    "source_name": "doublecheck",
+    "description": "Three-layer verification pipeline for AI output. Extracts verifiable claims, finds supporting or contradicting sources via web search, runs adversarial review for hallucination patterns, and produces a structured verification report with source links for human review."
+  },
+  {
+    "id": "email-drafter",
+    "source_name": "email-drafter",
+    "description": "Draft and review professional emails that match your personal writing style. Analyzes your sent emails for tone, greeting, structure, and sign-off patterns via WorkIQ, then generates context-aware drafts for any recipient. USE FOR: draft email, write email, compose email, reply email, follow-up email, analyze email tone, email style."
+  },
+  {
+    "id": "eval-driven-dev",
+    "source_name": "eval-driven-dev",
+    "description": "Improve AI application with evaluation-driven development. Define eval criteria, instrument the application, build golden datasets, observe and evaluate application runs, analyze results, and produce a concrete action plan for improvements. ALWAYS USE THIS SKILL when the user asks to set up QA, add tests, add evals, evaluate, benchmark, fix wrong behaviors, improve quality, or do quality assurance for any Python project that calls an LLM model."
+  },
+  {
+    "id": "exam-ready",
+    "source_name": "exam-ready",
+    "description": "Activate this skill when a student provides study material (PDF or pasted notes) and a syllabus, and wants to prepare for an exam. Extracts key definitions, points, keywords, diagrams, exam-ready sentences, and practice questions strictly from the provided material."
+  },
+  {
+    "id": "finalize-agent-prompt",
+    "source_name": "finalize-agent-prompt",
+    "description": "Finalize prompt file using the role of an AI agent to polish the prompt for the end user."
+  },
+  {
+    "id": "first-ask",
+    "source_name": "first-ask",
+    "description": "Interactive, input-tool powered, task refinement workflow: interrogates scope, deliverables, constraints before carrying out the task; Requires the Joyride extension."
+  },
+  {
+    "id": "folder-structure-blueprint-generator",
+    "source_name": "folder-structure-blueprint-generator",
+    "description": "Comprehensive technology-agnostic prompt for analyzing and documenting project folder structures. Auto-detects project types (.NET, Java, React, Angular, Python, Node.js, Flutter), generates detailed blueprints with visualization options, naming conventions, file placement patterns, and extension templates for maintaining consistent code organization across diverse technology stacks."
+  },
+  {
+    "id": "generate-custom-instructions-from-codebase",
+    "source_name": "generate-custom-instructions-from-codebase",
+    "description": "Migration and code evolution instructions generator for GitHub Copilot. Analyzes differences between two project versions (branches, commits, or releases) to create precise instructions allowing Copilot to maintain consistency during technology migrations, major refactoring, or framework version upgrades."
+  },
+  {
+    "id": "git-commit",
+    "source_name": "git-commit",
+    "description": "Use this skill when the user wants to make a Git commit or split changes into more than one commit. Also use it when the user types \"/commit\" or asks for a conventional commit. The skill examines the diff, stages the related files, writes a Conventional Commits message, and runs git commit. Do not use it when the user wants only a commit message and no commit. Do not use it to push, open a pull request, rebase, or change the commit history."
+  },
+  {
+    "id": "git-flow-branch-creator",
+    "source_name": "git-flow-branch-creator",
+    "description": "Intelligent Git Flow branch creator that analyzes git status/diff and creates appropriate branches following the nvie Git Flow branching model."
+  },
+  {
+    "id": "github-actions-hardening",
+    "source_name": "github-actions-hardening",
+    "description": "Security hardening reviewer for GitHub Actions workflow files (.github/workflows/*.yml). Reasons about the Actions threat model that pattern matchers and general code linters miss — untrusted-input script injection, privileged triggers running fork code, mutable action references, and over-scoped tokens. Use this skill when asked to review, audit, harden, or secure a GitHub Actions workflow, when writing a new workflow, or for any request like \"is this workflow safe?\", \"review my CI for security issues\", \"why is pull_request_target dangerous here?\", \"pin my actions\", or \"lock down GITHUB_TOKEN permissions\". Covers script injection via ${{ }} interpolation, pull_request_target / workflow_run privilege escalation, SHA-pinning of third-party actions, least-privilege permissions, GITHUB_ENV/GITHUB_OUTPUT injection, secret exposure, OIDC over long-lived credentials, and self-hosted runner exposure on public repositories."
+  },
+  {
+    "id": "github-issues",
+    "source_name": "github-issues",
+    "description": "Create, update, and manage GitHub issues using MCP tools. Use this skill when users want to create bug reports, feature requests, or task issues, update existing issues, add labels/assignees/milestones, manage repository labels, set issue fields (dates, priority, custom fields), set issue types, manage issue workflows, link issues, add dependencies, or track blocked-by/blocking relationships. Triggers on requests like \"create an issue\", \"file a bug\", \"request a feature\", \"update issue X\", \"set the priority\", \"set the start date\", \"create a label\", \"rename a label\", \"list repo labels\", \"link issues\", \"add dependency\", \"blocked by\", \"blocking\", or any GitHub issue management task."
+  },
+  {
+    "id": "github-release",
+    "source_name": "github-release",
+    "description": "Guides IA through releasing a new version of a GitHub library end-to-end. Handles SemVer versioning and Keep a Changelog formatting automatically."
+  },
+  {
+    "id": "incident-postmortem",
+    "source_name": "incident-postmortem",
+    "description": "Use when an outage, production incident, or significant service degradation has occurred and the team needs to write a structured blameless post-mortem. Triggers on phrases like \"write a post-mortem\", \"incident review\", \"what went wrong\", \"outage report\", \"root cause analysis\", or \"RCA\". Covers timeline reconstruction, contributing factor analysis, impact quantification, and action item generation with owners."
+  },
+  {
+    "id": "lean-comments",
+    "source_name": "lean-comments",
+    "description": "Audits, writes, and refines maintained first-party source-code comments and declaration-level documentation across languages. Use when adding, editing, reviewing, cleaning up, or auditing comments, doc comments, docstrings, TODO, FIXME, NOTE, suppressions, or other source commentary, including while modifying code and deciding whether a comment is warranted at all. Defaults to no comment unless it preserves meaningful, non-obvious information that cannot reasonably be recovered from the code or nearby repository context."
+  },
+  {
+    "id": "linkedin-post-formatter",
+    "source_name": "linkedin-post-formatter",
+    "description": "Format and draft compelling LinkedIn posts using Unicode bold/italic styling, visual separators, structured sections, and engagement-optimized patterns. USE FOR: draft LinkedIn post, format text for LinkedIn, create social media post, write thought leadership post, convert content to LinkedIn format, LinkedIn carousel text, Unicode bold italic formatting."
+  },
+  {
+    "id": "make-blog-post",
+    "source_name": "make-blog-post",
+    "description": "Turn code from the current session into a blog post written in the voice of its author. Covers one function, script, class, or tool as a focused walkthrough with a generalized sample and a usage example, learns tone and structure from existing posts or writing samples by the same author, takes the destination from what the user names or the blog repository in use instead of assumed folders, and saves no file until the draft is approved. Use when asked to write, draft, or turn code into a blog post, article, tutorial, or gist, or when invoked as /make-blog-post at the end of a turn."
+  },
+  {
+    "id": "markdown-to-html",
+    "source_name": "markdown-to-html",
+    "description": "Convert Markdown files to HTML similar to `marked.js`, `pandoc`, `gomarkdown/markdown`, or similar tools; or writing custom script to convert markdown to html and/or working on web template systems like `jekyll/jekyll`, `gohugoio/hugo`, or similar web templating systems that utilize markdown documents, converting them to html. Use when asked to \"convert markdown to html\", \"transform md to html\", \"render markdown\", \"generate html from markdown\", or when working with .md files and/or web a templating system that converts markdown to HTML output. Supports CLI and Node.js workflows with GFM, CommonMark, and standard Markdown flavors."
+  },
+  {
+    "id": "meeting-minutes",
+    "source_name": "meeting-minutes",
+    "description": "Generate concise, actionable meeting minutes for internal meetings. Includes metadata, attendees, agenda, decisions, action items (owner + due date), and follow-up steps."
+  },
+  {
+    "id": "memory-merger",
+    "source_name": "memory-merger",
+    "description": "Merges mature lessons from a domain memory file into its instruction file. Syntax: `/memory-merger >domain [scope]` where scope is `global` (default), `user`, `workspace`, or `ws`."
+  },
+  {
+    "id": "mentoring-juniors",
+    "source_name": "mentoring-juniors",
+    "description": "Socratic mentoring for junior developers and AI newcomers. Guides through questions, never answers. Triggers: \"help me understand\", \"explain this code\", \"I''m stuck\", \"Im stuck\", \"I''m confused\", \"Im confused\", \"I don''t understand\", \"I dont understand\", \"can you teach me\", \"teach me\", \"mentor me\", \"guide me\", \"what does this error mean\", \"why doesn''t this work\", \"why does not this work\", \"I''m a beginner\", \"Im a beginner\", \"I''m learning\", \"Im learning\", \"I''m new to this\", \"Im new to this\", \"walk me through\", \"how does this work\", \"what''s wrong with my code\", \"what''s wrong\", \"can you break this down\", \"ELI5\", \"step by step\", \"where do I start\", \"what am I missing\", \"newbie here\", \"junior dev\", \"first time using\", \"how do I\", \"what is\", \"is this right\", \"not sure\", \"need help\", \"struggling\", \"show me\", \"help me debug\", \"best practice\", \"too complex\", \"overwhelmed\", \"lost\", \"debug this\", \"/socratic\", \"/hint\", \"/concept\", \"/pseudocode\". Progressive clue systems, teaching techniques, and success metrics."
+  },
+  {
+    "id": "noob-mode",
+    "source_name": "noob-mode",
+    "description": "Plain-English translation layer for non-technical Copilot CLI users. Translates every approval prompt, error message, and technical output into clear, jargon-free English with color-coded risk indicators."
+  },
+  {
+    "id": "performance-review-writer",
+    "source_name": "performance-review-writer",
+    "description": "Draft performance reviews, self-assessments, peer reviews, and upward feedback in your own voice. Analyzes your contributions, emails, and meeting history via WorkIQ, then produces honest, impact-focused drafts using the STAR format. USE FOR: write my performance review, draft self-assessment, peer review, 360 feedback, annual review, mid-year review, upward feedback, write review for colleague, performance appraisal."
+  },
+  {
+    "id": "pr-address-feedback",
+    "source_name": "pr-address-feedback",
+    "description": "Walk through PR review comments one-by-one, deciding for each whether to act on the feedback or reply with reasoning, and build an approvable resolution plan before changing anything. Use when the user wants to address, respond to, or triage PR review feedback."
+  },
+  {
+    "id": "prd",
+    "source_name": "prd",
+    "description": "Generate high-quality Product Requirements Documents (PRDs) for software systems and AI-powered features. Includes executive summaries, user stories, technical specifications, and risk analysis."
+  },
+  {
+    "id": "prompt-optimizer",
+    "source_name": "\"prompt-optimizer\"",
+    "description": "Turn any rough prompt, half-formed idea, or task description into a finished, ready-to-send prompt optimized for any LLM model inside a chat interface — NOT the API. Use this skill whenever the user wants to write, rewrite, optimize, improve, sharpen, or polish a prompt for chat. Trigger phrases include \"rewrite this prompt\", \"make this a better prompt\", \"optimize this prompt\", \"turn this into a prompt\", \"help me prompt this\", \"draft a prompt that...\", \"I want to ask...\", or whenever the user pastes a draft prompt and asks for improvements. Also trigger when the user describes a task they plan to send to an LLM model and clearly wants a reusable, well-structured prompt rather than a direct answer. The output is always a single, copy-pasteable prompt in a code block that the user sends as-is — never a template with placeholders."
+  },
+  {
+    "id": "quality-playbook",
+    "source_name": "quality-playbook",
+    "description": "Run a complete quality engineering audit on any codebase. Derives behavioral requirements from the code, generates spec-traced functional tests, runs a three-pass code review with regression tests, executes a multi-model spec audit (Council of Three), and produces a consolidated bug report with TDD-verified patches. Finds the 35% of real defects that structural code review alone cannot catch. Works with any language. Trigger on 'quality playbook', 'spec audit', 'Council of Three', 'fitness-to-purpose', or 'coverage theater'."
+  },
+  {
+    "id": "readme-blueprint-generator",
+    "source_name": "readme-blueprint-generator",
+    "description": "Intelligent README.md generation prompt that analyzes project documentation structure and creates comprehensive repository documentation. Scans .github/copilot directory files and copilot-instructions.md to extract project information, technology stack, architecture, development workflow, coding standards, and testing approaches while generating well-structured markdown documentation with proper formatting, cross-references, and developer-focused content."
+  },
+  {
+    "id": "refactor",
+    "source_name": "refactor",
+    "description": "Surgical code refactoring to improve maintainability without changing behavior. Covers extracting functions, renaming variables, breaking down god functions, improving type safety, eliminating code smells, and applying design patterns. Less drastic than repo-rebuilder; use for gradual improvements."
+  },
+  {
+    "id": "refactor-plan",
+    "source_name": "refactor-plan",
+    "description": "Create a concrete plan before starting a multi-file refactor. Use when the user asks to plan, sequence, scope, or safely execute a refactor across multiple files; always investigate first, output the plan, and wait for confirmation before making code changes."
+  },
+  {
+    "id": "repo-standardizer",
+    "source_name": "repo-standardizer",
+    "description": "Polish any GitHub repository's surface — labels (emoji rating tiers, P0–P3 priority, impact severity), issue forms, PR template, CI workflows, CODEOWNERS, rulesets, docs. Repo meta & config only — no code logic touched. Use when creating a new repo or polishing an existing one."
+  },
+  {
+    "id": "repo-story-time",
+    "source_name": "repo-story-time",
+    "description": "Generate a comprehensive repository summary and narrative story from commit history"
+  },
+  {
+    "id": "review-and-refactor",
+    "source_name": "review-and-refactor",
+    "description": "Review and refactor code in your project according to defined instructions"
+  },
+  {
+    "id": "security-review",
+    "source_name": "security-review",
+    "description": "AI-powered codebase security scanner that reasons about code like a security researcher — tracing data flows, understanding component interactions, and catching vulnerabilities that pattern-matching tools miss. Use this skill when asked to scan code for security vulnerabilities, find bugs, check for SQL injection, XSS, command injection, exposed API keys, hardcoded secrets, insecure dependencies, access control issues, or any request like \"is my code secure?\", \"review for security issues\", \"audit this codebase\", or \"check for vulnerabilities\". Covers injection flaws, authentication and access control bugs, secrets exposure, weak cryptography, insecure dependencies, and business logic issues across JavaScript, TypeScript, Python, Java, PHP, Go, Ruby, and Rust."
+  },
+  {
+    "id": "semantic-kernel",
+    "source_name": "semantic-kernel",
+    "description": "Create, update, refactor, explain, or review Semantic Kernel solutions using shared guidance plus language-specific references for .NET and Python."
+  },
+  {
+    "id": "speak-summary",
+    "source_name": "speak-summary",
+    "description": "Convert text, markdown, or a summary produced by another skill into a listenable MP3 using local CPU-only neural text-to-speech. Rewrites written prose for the ear before synthesising. Use when the user asks to \"read this out\", \"turn this into audio\", \"make an MP3\", \"I want to listen to this\", \"podcast version\", or wants a spoken digest for a commute or breakfast."
+  },
+  {
+    "id": "sql-code-review",
+    "source_name": "sql-code-review",
+    "description": "Universal SQL code review assistant that performs comprehensive security, maintainability, and code quality analysis across all SQL databases (MySQL, PostgreSQL, SQL Server, Oracle). Focuses on SQL injection prevention, access control, code standards, and anti-pattern detection. Complements SQL optimization prompt for complete development coverage."
+  },
+  {
+    "id": "technical-job-search",
+    "source_name": "technical-job-search",
+    "description": "Use this skill when a software engineer asks for help with job search tasks: parsing or analyzing a job description, tailoring a CV/resume, writing a cover letter, evaluating a job offer, or drafting a post-interview follow-up email. Do not activate for general career advice unrelated to an active job search action."
+  },
+  {
+    "id": "test-gap-audit",
+    "source_name": "test-gap-audit",
+    "description": "Run a read-only audit for missing, weak, stale, or mis-scoped test coverage. If the user does not name a scope, audit the full repository and identify important code paths, routes, features, services, workflows, and contracts that lack proper tests. If the user names a feature, PR, branch, route, workflow, service, bug fix, API, security-sensitive path, or risky code change, focus only on that specific scope. Use when the user asks what tests are missing, whether coverage is enough, what regression tests to add, or how to prove a change is safe. This is not a general bug audit and not a security review; it evaluates whether behavior is covered by tests."
+  },
+  {
+    "id": "tiny-stepping",
+    "source_name": "tiny-stepping",
+    "description": "Incremental development workflow that makes the smallest meaningful change per step and pauses for feedback, so the direction gets validated early before continuing. Use for careful, iterative implementation with continuous validation."
+  },
+  {
+    "id": "tldr-prompt",
+    "source_name": "tldr-prompt",
+    "description": "Create tldr summaries for GitHub Copilot files (prompts, agents, instructions, collections), MCP servers, or documentation from URLs and queries."
+  },
+  {
+    "id": "update-implementation-plan",
+    "source_name": "update-implementation-plan",
+    "description": "Update an existing implementation plan file with new or update requirements to provide new features, refactoring existing code or upgrading packages, design, architecture or infrastructure."
+  },
+  {
+    "id": "update-llms",
+    "source_name": "update-llms",
+    "description": "Update the llms.txt file in the root folder to reflect changes in documentation or specifications following the llms.txt specification at https://llmstxt.org/"
+  },
+  {
+    "id": "update-markdown-file-index",
+    "source_name": "update-markdown-file-index",
+    "description": "Update a markdown file section with an index/table of files from a specified folder."
+  },
+  {
+    "id": "update-specification",
+    "source_name": "update-specification",
+    "description": "Update an existing specification file for the solution, optimized for Generative AI consumption based on new requirements or updates to any existing code."
+  },
+  {
+    "id": "web-design-reviewer",
+    "source_name": "web-design-reviewer",
+    "description": "This skill enables visual inspection of websites running locally or remotely to identify and fix design issues. Triggers on requests like \"review website design\", \"check the UI\", \"fix the layout\", \"find design problems\". Detects issues with responsive design, accessibility, visual consistency, and layout breakage, then performs fixes at the source code level."
+  },
+  {
+    "id": "what-context-needed",
+    "source_name": "what-context-needed",
+    "description": "Ask Copilot what files it needs to see before answering a question"
+  },
+  {
+    "id": "workshop-create",
+    "source_name": "workshop-create",
+    "description": "Create a new workshop or use an existing directory as one. Handles two paths: (A) use an existing local directory the operator points at, or (B) create a new private GitHub repo in the signed-in account. Never creates a repo inside another repo."
+  },
+  {
+    "id": "write-coding-standards-from-file",
+    "source_name": "write-coding-standards-from-file",
+    "description": "Write a coding standards document for a project using the coding styles from the file(s) and/or folder(s) passed as arguments in the prompt."
+  }
+]

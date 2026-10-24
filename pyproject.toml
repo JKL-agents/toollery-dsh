@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "toollery-dsh"
-version = "0.2.3"
-description = "Independent Toollery plugin for DeepSeek Harness"
+version = "0.3.0"
+description = "Independent Toollery plugin for DeepSeek Harness tools and skills"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"

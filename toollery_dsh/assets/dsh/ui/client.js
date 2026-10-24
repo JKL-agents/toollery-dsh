@@ -158,6 +158,12 @@ window.__ModuleLoader__.load({
       const [draftK, setDraftK] = React.useState('3')
       React.useEffect(() => { if (data) setDraftK(String(data.k)) }, [data?.k])
       const status = data ? data.enabled ? 'ON' : 'OFF' : 'Loading'
+      const current = data?.last_selection
+      const currentK = current?.budget === 'all' ? 'all' : (Number.isInteger(current?.k) ? current.k : null)
+      const nextK = data?.budget === 'all' ? 'all' : data?.k
+      const settingText = currentK === null
+        ? `Next turn: k=${nextK}`
+        : `Current turn: k=${currentK} · Next turn: k=${nextK}`
       const notice = error || data?.error || (['approval_required', 'refresh_failed', 'needs_setup', 'needs_preparation', 'unsupported'].includes(data?.phase) ? data.phase : '')
       return h('section', { 'aria-label': 'Toollery controls', style: collapsed
         ? { marginTop: 4, display: 'flex', justifyContent: 'flex-end' } : { ...panel, marginTop: 8 } },
@@ -174,30 +180,37 @@ window.__ModuleLoader__.load({
         h('div', { style: { display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' } },
           h('strong', null, 'Toollery'),
           h('button', { role: 'switch', 'aria-label': 'Enable Toollery', 'aria-checked': !!data?.enabled,
-            disabled: busy || !data || (!data.enabled && data.phase && !data.retrieval_ready), onClick: () => configure({ enabled: !data.enabled }),
+            disabled: busy || !data || (!data.enabled && data.retrieval_target !== 'skills' && data.phase && !data.retrieval_ready), onClick: () => configure({ enabled: !data.enabled }),
             style: { ...input, fontWeight: 700, color: data?.enabled ? '#19865b' : 'inherit' } }, data ? data.enabled ? 'ON' : 'OFF' : 'Loading'),
-          h('label', null, 'Representation ', h('select', { 'aria-label': 'Toollery representation', style: input,
-            value: data?.representation || 'spec_manual', disabled: busy || !data || !data.enabled,
+          h('label', null, data?.retrieval_target === 'both' ? 'Tool representation ' : 'Representation ', h('select', { 'aria-label': 'Toollery representation', style: input,
+            value: data?.representation || 'spec_manual', disabled: busy || !data || !data.enabled || data.retrieval_target === 'skills',
             onChange: e => configure({ representation: e.target.value }) },
           ...['spec', 'manual', 'spec_manual'].map(value => h('option', { key: value, value }, value)))),
+          ['skills', 'both'].includes(data?.retrieval_target) && h('span', { style: { opacity: .75 } }, 'Skill retrieval: metadata BM25'),
           h('label', null, 'Budget ', h('select', { 'aria-label': 'Toollery budget', style: input,
             value: data?.budget || 'top_k', disabled: busy || !data || !data.enabled,
             onChange: e => configure({ budget: e.target.value }) },
           h('option', { value: 'top_k' }, 'top-k'), h('option', { value: 'all' }, 'all'))),
-          h('label', null, 'k ', h('input', { 'aria-label': 'Toollery k', type: 'number', min: 1, max: data?.tool_count || undefined,
+          h('label', null, 'Target ', h('select', { 'aria-label': 'Toollery retrieval target', style: input,
+            value: data?.retrieval_target || 'tools', disabled: busy || !data,
+            onChange: e => configure({ retrieval_target: e.target.value }) },
+          h('option', { value: 'tools' }, 'tools'), h('option', { value: 'skills' }, 'skills'),
+          h('option', { value: 'both' }, 'both'))),
+          h('label', null, 'k ', h('input', { 'aria-label': 'Toollery k', type: 'number', min: 1, max: data?.retrieval_target === 'tools' ? data.tool_count || undefined : undefined,
             value: draftK, disabled: busy || !data?.enabled || data?.budget !== 'top_k',
             style: { ...input, width: 52 }, onChange: e => setDraftK(e.target.value) })),
           h('button', { style: input, disabled: busy || !data?.enabled || data?.budget !== 'top_k'
-            || !Number.isInteger(Number(draftK)) || Number(draftK) < 1 || Number(draftK) > data?.tool_count || Number(draftK) === data?.k,
+            || !Number.isInteger(Number(draftK)) || Number(draftK) < 1 || (data?.retrieval_target === 'tools' && Number(draftK) > data.tool_count) || Number(draftK) === data?.k,
             onClick: () => configure({ k: Number(draftK) }) }, 'Apply k'),
-          h('span', { style: { opacity: .65 } }, data ? `Full pool: ${data.tool_count}` : 'Waiting for session'),
+          h('span', { style: { opacity: .65 } }, data ? `Indexed tool pool: ${data.tool_count}` : 'Waiting for session'),
           h('button', { type: 'button', 'aria-label': 'Collapse Toollery panel', 'aria-expanded': true,
             title: 'Hide controls and turn cards. Retrieval keeps its current setting.', onClick: togglePanel,
             style: { ...input, marginLeft: 'auto', display: 'inline-flex', padding: 5, cursor: 'pointer' } },
             h('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor',
               strokeWidth: 2, 'aria-hidden': true }, h('path', { d: 'm6 15 6-6 6 6' })))),
         h('div', { role: 'status', style: { marginTop: 6, opacity: .75 } }, !data ? 'Loading session settings...' : busy ? 'Applying settings...' : data.enabled
-          ? 'Changes apply to the next turn. The current selection stays fixed.' : 'OFF: the next turn uses the tools allowed by DSH without retrieval.'),
+          ? `Changes apply to the next turn. ${settingText}. Target: ${data.retrieval_target || 'tools'}. ${data.retrieval_target === 'skills' ? 'Skill retrieval keeps the full host-eligible tool pool.' : 'The current selection stays fixed.'}`
+          : 'OFF: the next turn uses the tools allowed by DSH without retrieval.'),
         data?.phase && h('div', { style: { marginTop: 8 } },
           h('div', null, `Status: ${data.phase} · Manuals ${data.manuals_valid}/${data.tool_count}`),
           progressText(data) && h('div', { role: 'status', style: { opacity: .8, marginTop: 4 } }, progressText(data)),
@@ -230,10 +243,13 @@ window.__ModuleLoader__.load({
         style: { ...panel, margin: '8px 0', display: collapsed ? 'none' : undefined } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' } },
           h('strong', null, `Toollery · ${record.enabled ? 'ON' : 'OFF'}`),
-          h('span', { style: { opacity: .7 } }, record.enabled ? `${record.representation} · ${record.budget === 'all' ? 'all' : 'k=' + record.k} · ${record.retrieval_ms.toFixed(2)} ms` : 'Full pool; retrieval bypassed')),
+          h('span', { style: { opacity: .7 } }, record.enabled ? `${record.retrieval_target || 'tools'} · ${record.retrieval_target === 'skills' ? 'metadata BM25' : record.retrieval_target === 'both' ? 'tools: ' + record.representation + ' / skills: metadata BM25' : record.representation} · ${record.budget === 'all' ? 'all' : 'k=' + record.k} · ${(record.retrieval_target === 'skills' ? record.skill_retrieval_ms || 0 : record.retrieval_ms).toFixed(2)} ms` : 'Full pool; retrieval bypassed')),
         h('p', { style: { margin: '8px 0 2px', fontSize: 13 } },
-          `Pool ${record.full_pool_count}${record.eligible_pool_count === undefined ? '' : ' → Allowed ' + record.eligible_pool_count} → Selected ${record.selected_names.length} → Called ${calledNames.length} tools`,
+          `Tool pool ${record.full_pool_count}${record.eligible_pool_count === undefined ? '' : ' → Allowed ' + record.eligible_pool_count} → Selected ${record.selected_names.length} → Called ${calledNames.length} tools`,
           h('span', { style: { opacity: .65, fontSize: 12 } }, ` (${calls.length} calls${errors ? ", " + errors + " errors" : ""})`)),
+        record.skill_selected_names && h('p', { style: { margin: '6px 0 2px' } },
+          `Skills ${Number.isFinite(record.skill_candidate_count) ? record.skill_candidate_count + ' → ' : ''}selected (${record.skill_selected_names.length})${Number.isFinite(record.skill_retrieval_ms) ? ` · ${record.skill_retrieval_ms.toFixed(2)} ms` : ''}: `,
+          h('code', null, record.skill_selected_names.join(', ') || 'none')),
         h(ToolList, { title: `Selected tools (${selected.length})`, tools: selected }),
         h(ToolList, { title: `Called tools (${calledNames.length})`, tools: pool.filter(tool => calledNames.includes(tool.name)) }),
         h(ToolList, { title: `Full tool pool (${pool.length})`, tools: pool }))

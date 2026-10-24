@@ -18,5 +18,6 @@ This project is **not affiliated with or endorsed by the original Toollery autho
 | [uv](https://github.com/astral-sh/uv), [Node.js](https://nodejs.org/), [pnpm](https://pnpm.io/) | Private Windows launcher runtimes and installation tools | Downloaded at setup; not vendored. Their own licenses and notices apply. |
 | [ToolRet](https://huggingface.co/datasets/mangopy/ToolRet-Tools) | Optional retrieval evaluation data | Downloaded separately; dataset and its constituent source terms apply. No raw data or generated benchmark manuals included. |
 | [ToolTalk](https://github.com/microsoft/ToolTalk) | Optional executable evaluation, using upstream executor and API checks; MIT | Cloned separately at `e05f4ce6132c80ed33392b81535b077d56ab28fd`. No upstream code or data vendored; local scorer adaptation is documented. |
+| [GitHub awesome-copilot](https://github.com/github/awesome-copilot) | 95 optional, standalone sample `SKILL.md` files for testing DSH's native skill loader and Toollery metadata retrieval; MIT | Bundled under `plugin/sample-skills/` from commit `d85f762d6e521abf5fe16703946e9b38adc42da7`; names are prefixed `sample-`. |
 
 The MIT license in this repository covers this project's original code. Third-party code, datasets and quoted paper material retain their own rights and terms. See installed dependencies for their complete notices.

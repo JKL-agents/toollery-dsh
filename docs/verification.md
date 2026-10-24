@@ -1,8 +1,26 @@
 # Verification summary
 
+## v0.3.0 release checks
+
+This release adds native skill adaptation and related UI/worker behavior. The checks below cover the packaged worker, native DSH lifecycle and skill routing; they do not claim a retrieval-quality benchmark or universal compatibility with arbitrary DSH plugins.
+
+## Skill metadata retrieval (local, 2026-10-24)
+
+After the Desktop `cannot get property "snapshot" without inject` failure, the integration was changed to rank DSH's native catalog rather than accessing the skill service through an injected context. The final local release check passed **76 Python tests (3 optional ToolTalk skips)**, **25 Node UI/lifecycle/source/discovery tests**, and **5 packaged-plugin tests**, including the actual embedded worker over JSON transport.
+
+A fresh isolated fixture using real Cordis, DSH SkillRegistry, SystemPrompt, native `skill` dispatch and the packaged Python worker passed **10 acceptance checks**: a resumed full catalog narrows to top-k; the selected body loads; later model steps do not duplicate the catalog; later turns replace selection; an unadmitted step does not suppress a retry; All exposes all 95 sample skills while excluding a user-only skill; All-to-top-k reranks; OFF restores the catalog/tools; Both narrows both pools while retaining the loader; and a host-restricted loader stays hidden. Skills keeps all host-eligible tools. Empty catalogs and blank native descriptions are also accepted. No paid calls or changes to the active Desktop profile were made.
+
+The isolated DSH skill fixture passed all **10** native lifecycle checks. The v0.3.0 wheel and source archive passed `twine check`; the npm tarball was checked for its version, embedded matching worker, UI assets, skill provider and sample catalog. This covers real native service/lifecycle integration, not a retrieval-quality benchmark. The maintainer and a colleague also completed successful Desktop installation/use reports; those reports complement, but do not replace, the isolated lifecycle checks. No paid calls or changes to the active Desktop profile were made. Reproduce the real-host fixture with `node tests/fixtures/dsh-skill-host.mjs <installed-pnpm-store> [report.json]`, setting `TOOLLERY_TEST_PYTHON` to the complete test interpreter.
+
+### Earlier metadata smoke check
+
+The MVP was exercised against the seven Office skills shipped in the pinned DSH runtime resource cache (`office`, `office-docx`, `office-export-pdf`, `office-pptx`, `office-recalculate`, `office-render`, `office-xlsx`). Frontmatter name/description metadata was submitted to the worker's separate BM25 skill index; full `SKILL.md` bodies were not read by Toollery. Queries for Excel editing, Word creation, PowerPoint creation and spreadsheet recalculation returned the corresponding skill among the top two. The test also confirmed that the metadata endpoint created no manual cache or discovery catalog.
+
+This earlier smoke check validated metadata search and cache separation. Native loading and lifecycle coverage were subsequently added above; the maintainer's Desktop use report provides an additional manual check of the published integration.
+
 ## v0.2.2 release packaging
 
-This patch changes the panel, examples and documentation; it does not change retrieval algorithms. Local release checks cover synchronized worker/plugin/runtime version metadata, wheel/source metadata validation, matching UI assets in the plugin and embedded wheel, inclusion of the optional example's configuration/skill/license in source archives, documentation links and artifact checksums. The existing Windows CI runs the offline regression and installed-package checks for the release commit. Earlier interaction and discovery checks are recorded below; they were not repeated solely for documentation edits.
+The v0.2.2 packaging checks below are retained as historical evidence. That release changed the panel, examples and documentation; its local checks covered synchronized metadata, package assets, archive contents, documentation links and checksums. The Windows CI workflow runs the offline regression and installed-package checks for each release commit.
 
 ## Desktop installation reports (2026-10-23)
 

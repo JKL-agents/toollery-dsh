@@ -70,6 +70,7 @@ class SessionState:
     pool_revision: int = 0
     ready: bool = False
     enabled: bool = True
+    retrieval_target: str = "tools"
 
 
 class DSHBridge:
@@ -80,13 +81,15 @@ class DSHBridge:
     schemas and guards execution; this service only prepares and searches.
     """
 
-    def __init__(self, output_dir: Path, *, representation="spec_manual", budget="top_k", k=3, on_selection=None,
+    def __init__(self, output_dir: Path, *, representation="spec_manual", budget="top_k", k=3,
+                 retrieval_target="tools", on_selection=None,
                  on_snapshot=None, enabled=True, state_dir=None, compact_audit=False, handlers=None):
         self.validate_options(representation, budget, k)
+        self.validate_retrieval_target(retrieval_target)
         if not isinstance(enabled, bool):
             raise ValueError("enabled must be a boolean")
         self.output_dir = output_dir
-        self.defaults = representation, budget, k
+        self.defaults = representation, budget, k, retrieval_target
         self.default_enabled = enabled
         self.state_dir = Path(state_dir) if state_dir else None
         self.compact_audit = compact_audit
@@ -109,6 +112,11 @@ class DSHBridge:
         if isinstance(k, bool) or not isinstance(k, int) or k < 1:
             raise ValueError("k must be a positive integer")
 
+    @staticmethod
+    def validate_retrieval_target(target):
+        if target not in {"tools", "skills", "both"}:
+            raise ValueError("Invalid retrieval target")
+
     def capture(self, session_id: str, schemas: list[dict], discovery=None) -> dict:
         if not isinstance(session_id, str) or not session_id:
             raise ValueError("Invalid session identity")
@@ -120,9 +128,9 @@ class DSHBridge:
             if previous is not None and previous.pool.snapshot_hash != pool.snapshot_hash:
                 raise ValueError("Tool snapshot changed; prepare a new session")
             if previous is None:
-                rep, budget, k = self.defaults
+                rep, budget, k, retrieval_target = self.defaults
                 self.sessions[session_id] = SessionState(pool, representation=rep, budget=budget, k=k,
-                                                        enabled=self.default_enabled)
+                                                        enabled=self.default_enabled, retrieval_target=retrieval_target)
                 if self.state_dir:
                     file = self._state_file(session_id)
                     if file.is_file():
@@ -132,8 +140,11 @@ class DSHBridge:
                         if saved.get('snapshot_hash') == pool.snapshot_hash:
                             options = saved['options']
                             self.validate_options(options['representation'], options['budget'], options['k'])
+                            retrieval_target = options.get('retrieval_target', retrieval_target)
+                            self.validate_retrieval_target(retrieval_target)
                             state = self.sessions[session_id]
                             state.representation, state.budget, state.k = options['representation'], options['budget'], options['k']
+                            state.retrieval_target = retrieval_target
                             state.enabled = options['enabled']
                             state.revision = options.get('revision', 0)
                             state.pool_revision = options.get('pool_revision', 0)
@@ -271,7 +282,7 @@ class DSHBridge:
             return {"status": "committed", "snapshot_hash": target.snapshot_hash,
                     "pool_revision": state.pool_revision, "diff": diff, "report": report}
 
-    def configure(self, session_id, *, representation=None, budget=None, k=None, enabled=None):
+    def configure(self, session_id, *, representation=None, budget=None, k=None, enabled=None, retrieval_target=None):
         if enabled is not None and not isinstance(enabled, bool):
             raise ValueError("enabled must be a boolean")
         with self._lock:
@@ -279,7 +290,9 @@ class DSHBridge:
             self.validate_options(representation if representation is not None else state.representation,
                                   budget if budget is not None else state.budget,
                                   k if k is not None else state.k)
-            needs_preparation = enabled is True and not state.ready
+            target = retrieval_target if retrieval_target is not None else state.retrieval_target
+            self.validate_retrieval_target(target)
+            needs_preparation = enabled is True and target != 'skills' and not state.ready
         # Do not hold the bridge lock while entering the launcher's preparation
         # lock: another snapshot may already be preparing in the opposite order.
         if needs_preparation and self.on_snapshot:
@@ -289,14 +302,16 @@ class DSHBridge:
             rep = representation if representation is not None else state.representation
             limit = budget if budget is not None else state.budget
             count = k if k is not None else state.k
+            target = retrieval_target if retrieval_target is not None else state.retrieval_target
             self.validate_options(rep, limit, count)
+            self.validate_retrieval_target(target)
             # Prepare before committing ON. Failure leaves OFF and its full pool
             # usable; no silent spec fallback and no partially applied settings.
-            if enabled is True and not state.ready:
+            if enabled is True and target != 'skills' and not state.ready:
                 raise RuntimeError("Manuals and index are not ready")
-            if state.ready and rep not in state.searches:
+            if target != 'skills' and state.ready and rep not in state.searches:
                 raise ValueError("Manuals were not prepared for this mode")
-            state.representation, state.budget, state.k = rep, limit, count
+            state.representation, state.budget, state.k, state.retrieval_target = rep, limit, count, target
             if enabled is not None:
                 state.enabled = enabled
             state.revision += 1
@@ -311,7 +326,7 @@ class DSHBridge:
         state = self.sessions[session_id]
         atomic_json(self._state_file(session_id), {
             'snapshot_hash': state.pool.snapshot_hash,
-            'options': {key: getattr(state, key) for key in ('enabled', 'representation', 'budget', 'k', 'revision', 'pool_revision')},
+            'options': {key: getattr(state, key) for key in ('enabled', 'representation', 'budget', 'k', 'retrieval_target', 'revision', 'pool_revision')},
             'selections': [s for s in self.selections if s['session_id'] == session_id],
             'calls': [c for c in self.calls if c['session_id'] == session_id],
         })
@@ -328,14 +343,17 @@ class DSHBridge:
             budget = options.get('budget', state.budget)
             k = options.get('k', state.k)
             enabled = options.get('enabled', state.enabled)
+            retrieval_target = options.get('retrieval_target', state.retrieval_target)
             self.validate_options(representation, budget, k)
-            if enabled and not state.ready:
+            self.validate_retrieval_target(retrieval_target)
+            effective_enabled = enabled and retrieval_target != 'skills'
+            if effective_enabled and not state.ready:
                 raise RuntimeError("Manuals and index are not ready")
             if payload["snapshot_hash"] != state.pool.snapshot_hash:
                 raise ValueError("Stale tool snapshot")
             if payload.get("pool_revision") is not None and payload["pool_revision"] != state.pool_revision:
                 raise ValueError("Stale tool pool revision")
-            if enabled and representation not in state.searches:
+            if effective_enabled and representation not in state.searches:
                 raise ValueError("Selected representation is not prepared")
             started = time.perf_counter()
             eligible = payload.get('eligible_names', list(state.pool.tool_ids))
@@ -344,7 +362,7 @@ class DSHBridge:
                 raise ValueError('Invalid eligible tool set')
             ranked = (state.searches[representation].select(prompt, budget=budget, k=k,
                                                                  eligible_ids=eligible)
-                      if enabled else [])
+                      if effective_enabled else [])
             result = {
                 "session_id": session_id, "snapshot_hash": state.pool.snapshot_hash,
                 "prompt": prompt, "message_ids": payload.get("message_ids", []),
@@ -352,11 +370,12 @@ class DSHBridge:
                 "budget": budget, "k": k, "revision": state.revision,
                 "pool_revision": state.pool_revision,
                 "enabled": enabled,
+                "retrieval_target": retrieval_target,
                 "full_pool_count": len(state.pool.tools),
                 "eligible_pool_count": len(eligible),
-                "selected_names": [hit.tool_id for hit in ranked] if enabled else sorted(eligible),
+                "selected_names": [hit.tool_id for hit in ranked] if effective_enabled else sorted(eligible),
                 "ranked": [{"name": hit.tool_id, "score": hit.score} for hit in ranked],
-                "retrieval_ms": (time.perf_counter() - started) * 1000 if enabled else 0.0,
+                "retrieval_ms": (time.perf_counter() - started) * 1000 if effective_enabled else 0.0,
             }
             if not self.compact_audit:
                 result['tool_details'] = [
@@ -375,6 +394,20 @@ class DSHBridge:
             self.observations.append(payload)
             self._audit('assemblies', payload, self.observations)
         return {"ok": True}
+
+    def observe_skill(self, payload):
+        with self._lock:
+            selection = next((item for item in reversed(self.selections)
+                              if item['session_id'] == payload.get('session_id')
+                              and item['selection_id'] == payload.get('selection_id')), None)
+            if selection is None:
+                raise KeyError('Unknown skill selection')
+            selection['skill_selected_names'] = list(payload.get('selected_names', []))
+            selection['skill_candidate_count'] = payload.get('candidate_count')
+            selection['skill_retrieval_ms'] = payload.get('retrieval_ms')
+            self._audit('selections', selection, self.selections)
+            self._persist(payload['session_id'])
+        return {'ok': True}
 
     def _audit(self, name, record, records):
         if self.compact_audit:
@@ -414,6 +447,7 @@ class DSHBridge:
                 'tool_names': list(state.pool.tool_ids), 'snapshot_hash': state.pool.snapshot_hash,
                 'pool_revision': state.pool_revision,
                 'representation': state.representation, 'budget': state.budget, 'k': state.k,
+                'retrieval_target': state.retrieval_target,
                 'manuals_valid': state.preparation.get('valid', 0),
                 'last_selection': latest,
                 'turns': [{**s, 'calls': [c for c in self.calls if c['selection_id'] == s['selection_id']]}

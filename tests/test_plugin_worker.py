@@ -68,6 +68,21 @@ class PluginWorkerTests(unittest.TestCase):
         self.assertEqual([h.tool_id for h in index.search('apple', None, eligible_ids=['allowed', 'noise'])], ['allowed', 'noise'])
         self.assertEqual(index.search('apple', 1, eligible_ids=[]), [])
 
+    def test_skills_target_bypasses_tool_retrieval_and_keeps_host_eligible_pool(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bridge = WorkerBridge(directory)
+            snapshot = bridge.capture('skills', TOOLS)
+            bridge.jobs['skills'].join(10)
+            bridge.configure('skills', enabled=True, retrieval_target='skills', k=1)
+            status = bridge.status('skills')
+            self.assertEqual(status['retrieval_target'], 'skills')
+            selection = bridge.select({'session_id': 'skills', 'snapshot_hash': snapshot['snapshot_hash'],
+                                       'pool_revision': status['pool_revision'], 'prompt': 'Add numbers',
+                                       'eligible_names': ['sum', 'temperature']})
+            self.assertEqual(selection['retrieval_target'], 'skills')
+            self.assertEqual(selection['selected_names'], ['sum', 'temperature'])
+            self.assertEqual(selection['retrieval_ms'], 0.0)
+
     def test_explicit_preparation_off_reuse_and_changed_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             home = initialize(directory)
@@ -313,6 +328,71 @@ class PluginWorkerTests(unittest.TestCase):
             result = bridge.discovery_status({'session_id': 'native', 'job_id': accepted['job_id']})['result']
             self.assertEqual(result['status'], 'approval_required')
             self.assertEqual(result['missing'], 3)
+
+    def test_skill_metadata_search_does_not_load_bodies_or_generate_manuals(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bridge = WorkerBridge(directory)
+            result = bridge.request_skill_search({'prompt': 'render a spreadsheet chart', 'budget': 'top_k', 'k': 1,
+                'candidates': [
+                    {'name': 'office-docs', 'description': 'Create and edit office documents'},
+                    {'name': 'office-xlsx', 'description': 'Read and render spreadsheets and charts',
+                     'when_to_use': 'Use for workbook formulas and chart output', 'tags': ['spreadsheet', 'chart']},
+                ]})
+            self.assertEqual(result['status'], 'ranked')
+            self.assertEqual(result['selected_names'], ['office-xlsx'])
+            self.assertEqual(result['selection']['method'], 'metadata_bm25')
+            self.assertFalse((bridge.home / 'discovery-catalog.json').exists())
+            self.assertFalse(list((bridge.home / 'cache').rglob('*.json')))
+
+    def test_skill_search_prioritizes_explicit_name_and_name_terms(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bridge = WorkerBridge(directory)
+            result = bridge.request_skill_search({'prompt': 'Use sample-agent-architecture to design an AI assistant architecture',
+                'budget': 'top_k', 'k': 3, 'candidates': [
+                    {'name': 'sample-agent-architecture', 'description': 'Design AI agent architectures'},
+                    {'name': 'sample-agent-governance', 'description': 'Governance controls for AI agent systems'},
+                    {'name': 'sample-technical-job-search', 'description': 'Job search for AI software engineers'},
+                    {'name': 'sample-doc-and-modernize', 'description': 'Document and modernize a codebase'},
+                ]})
+            self.assertEqual(result['selected_names'][0], 'sample-agent-architecture')
+            self.assertEqual(len(result['selected_names']), 3)
+            self.assertEqual(result['selection']['method'], 'metadata_bm25_exact_name')
+
+    def test_skill_exact_matches_fill_slots_without_exceeding_budget(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bridge = WorkerBridge(directory)
+            candidates = [{'name': f'skill-{i:02}', 'description': 'meeting notes and action items'}
+                          for i in range(25)]
+            for k in (1, 3, 10, 20):
+                with self.subTest(k=k):
+                    result = bridge.request_skill_search({'prompt': 'Use skill-00 for meeting notes',
+                        'budget': 'top_k', 'k': k, 'candidates': candidates})
+                    self.assertEqual(len(result['selected_names']), k)
+                    self.assertEqual(len(set(result['selected_names'])), k)
+                    self.assertEqual(result['selected_names'][0], 'skill-00')
+                    json.dumps(result, allow_nan=False)
+            for budget, expected in [('top_k', 2), ('all', 25)]:
+                with self.subTest(budget=budget):
+                    result = bridge.request_skill_search({'prompt': 'Use skill-00, skill-01 and skill-02',
+                        'budget': budget, 'k': 2, 'candidates': candidates})
+                    self.assertEqual(len(result['selected_names']), expected)
+                    self.assertEqual(len(set(result['selected_names'])), expected)
+            boundary = bridge.request_skill_search({'prompt': 'Use skill-00-extra for meeting notes',
+                'k': 3, 'candidates': candidates})
+            self.assertEqual(boundary['selection']['method'], 'metadata_bm25')
+            no_hits = bridge.request_skill_search({'prompt': 'unmatchedword', 'k': 3, 'candidates': candidates})
+            self.assertEqual(no_hits['selected_names'], [])
+
+    def test_skill_search_accepts_empty_catalog_and_native_blank_description(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bridge = WorkerBridge(directory)
+            empty = bridge.request_skill_search({'prompt': 'find instructions', 'candidates': []})
+            self.assertEqual(empty['candidate_count'], 0)
+            self.assertEqual(empty['selected_names'], [])
+            named = bridge.request_skill_search({'prompt': 'meeting minutes', 'candidates': [
+                {'name': 'meeting-minutes', 'description': ''}]})
+            self.assertEqual(named['selected_names'], ['meeting-minutes'])
+            self.assertFalse(list((bridge.home / 'cache').rglob('*.json')))
 
 
 if __name__ == '__main__':
