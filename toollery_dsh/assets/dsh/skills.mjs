@@ -1,7 +1,12 @@
-// Metadata-only skill catalog projection. Full skill bodies stay in DSH's
-// skill providers and are loaded later by the host skill tool.
+// The catalog remains metadata-only in model history. Toollery may ask the
+// native host loader for body content solely to build local retrieval manuals;
+// the body is never projected back into the model-facing catalog.
 
 const escapeText = value => String(value).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+export const catalogDescription = value => {
+  const normalized = String(value).replaceAll(/\s+/g, ' ').trim()
+  return normalized.length <= 500 ? normalized : `${normalized.slice(0, 497)}...`
+}
 
 export function skillCandidates(summaries) {
   if (!Array.isArray(summaries)) return []
@@ -10,10 +15,31 @@ export function skillCandidates(summaries) {
     .filter(skill => skill.invocation?.modelInvocable !== false)
     .map(skill => ({
       name: skill.name,
-      description: skill.description,
+      description: catalogDescription(skill.description),
       ...(typeof skill.whenToUse === 'string' ? { when_to_use: skill.whenToUse } : {}),
       ...(skill.metadata && typeof skill.metadata === 'object' ? { tags: skill.metadata.tags } : {}),
     }))
+}
+
+export async function loadSkillCandidates(summaries, { skills, workingDirectory, agent, signal, cache,
+  loadBodies = true } = {}) {
+  const candidates = skillCandidates(summaries)
+  if (!loadBodies) return candidates
+  // Unit adapters and older non-native hosts may not expose the loader. Keep
+  // their spec-only path usable; manual mode will report missing bodies.
+  if (!skills || typeof skills.get !== 'function') return candidates
+  const cwd = workingDirectory?.ensure ? await workingDirectory.ensure(agent, signal) : undefined
+  const loaded = []
+  for (const candidate of candidates) {
+    const definition = await skills.get(candidate.name, { cwd, signal, scope: agent })
+    if (!definition || typeof definition.content !== 'string' || !definition.content.trim()) {
+      throw new Error(`The native loader could not load skill content for ${candidate.name}.`)
+    }
+    const record = { ...candidate, content: definition.content }
+    cache?.set(candidate.name, { content: definition.content })
+    loaded.push(record)
+  }
+  return loaded
 }
 
 export function catalogMessage(messages) {

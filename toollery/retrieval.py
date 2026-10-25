@@ -48,6 +48,34 @@ def build_documents(pool: ToolPool, representation: str, manuals: dict[str, dict
     return documents
 
 
+def build_skill_documents(candidates: list[dict], representation: str,
+                          manuals: dict[str, dict] | None = None) -> dict[str, str]:
+    """Build retrieval-only documents for native skills.
+
+    Skill bodies are generation evidence, not retrieval documents. Manual
+    representations index the generated intent queries and retain the native
+    catalog fields for the spec portion.
+    """
+    if representation not in REPRESENTATIONS:
+        raise ValueError(f"Invalid representation: {representation}")
+    names = [item["name"] for item in candidates]
+    if len(set(names)) != len(names):
+        raise ValueError("Skill names must be unique")
+    if representation != "spec" and (manuals is None or set(manuals) != set(names)):
+        raise ValueError("Manual skill retrieval requires valid coverage of the entire catalog")
+    documents = {}
+    for skill in candidates:
+        name = skill["name"]
+        metadata = "\n".join(str(skill.get(key, "")) for key in ("name", "description", "when_to_use", "tags") if skill.get(key))
+        if representation == "spec":
+            text = metadata
+        else:
+            proxy_text = "\n".join(manuals[name]["manual"]["proxy_queries"])
+            text = (name + "\n" + proxy_text) if representation == "manual" else (metadata + "\n" + proxy_text)
+        documents[name] = text
+    return documents
+
+
 @dataclass(frozen=True)
 class RankedTool:
     tool_id: str

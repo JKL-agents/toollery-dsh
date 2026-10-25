@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.1 - 2026-10-25
+
+- Add native skill manual generation and retrieval: DSH's scoped loader supplies skill bodies for bounded evidence, generated intent queries are cached separately from tool manuals, and `manual` / `spec_manual` search the generated skill manuals. DSH remains responsible for loading and executing selected skill bodies.
+- Check skill-manual cache readiness before sending a prompt. Missing entries require an explicit composer action; the draft is preserved and sending stays blocked until preparation finishes. Cache checks do not call the generator.
+- Keep tool and skill top-k values independent while simplifying the panel: use concise `Tool rep` / `Skill rep` labels, remove the redundant indexed-pool count, and apply both k values with one `Update k` action in `both` mode.
+- Clarify OFF behavior: Toollery retrieval is bypassed for the next turn and DSH's host-eligible tools and native skill catalog remain available under host restrictions.
+- Add focused worker, UI, service, packaging and real native-host coverage for skill manual preparation, cache preflight, retrieval and composer gating.
+
+See [the v0.3.1 release notes](docs/release-notes-v0.3.1.md) for scope and verification.
+
 ## 0.3.0 - 2026-10-25
 
 - Add native DSH skill adaptation with separate `tools`, `skills` and `both` retrieval targets. Skills mode ranks the host's current skill metadata with local BM25 and keeps the full host-eligible tool pool available to DSH.
@@ -15,8 +25,6 @@ See [the v0.3.0 release notes](docs/release-notes-v0.3.0.md) for scope and known
 
 - Fix Desktop worker setup when upgrading an existing pip-free profile venv: remove only stale Toollery files/metadata before installing the new bundled wheel, and report the failed setup stage.
 - Document recovery for local npm metadata/cache-blob errors during plugin reinstall.
-
-## Unreleased
 
 ## 0.2.2 - 2026-10-23
 

@@ -33,6 +33,64 @@ class PluginWorkerTests(unittest.TestCase):
                  '_generation_total': 1, '_started_monotonic': time.monotonic() - 4}
         self.assertIsNone(WorkerBridge._timing(state)['eta_seconds'])
 
+    def test_skill_preparation_progress_reports_completed_manuals_and_eta(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = initialize(directory)
+            (home / 'manual-generator.json').write_text(json.dumps({'provider': 'mock'}))
+            bridge = WorkerBridge(home)
+            bridge.capture('skill-eta', TOOLS)
+            bridge.jobs['skill-eta'].join(10)
+            bridge.configure('skill-eta', retrieval_target='skills', skill_representation='spec_manual')
+            entered, finish = threading.Event(), threading.Event()
+            candidates = [
+                {'name': f'skill-{index}', 'description': '', 'content': 'Do a useful task.'}
+                for index in range(6)
+            ]
+
+            def prepare(_candidates, _generator, _cache, **options):
+                time.sleep(0.05)
+                options['progress'](2, len(candidates), 2, 0, 0)
+                entered.set()
+                finish.wait(5)
+                raise RuntimeError('Stop after inspecting progress')
+
+            with patch('toollery_dsh.worker.prepare_skill_manuals', side_effect=prepare), \
+                    patch.object(bridge, '_configured_generator', return_value=MockGenerator()):
+                try:
+                    bridge.request_skill_preparation({
+                        'session_id': 'skill-eta', 'candidates': candidates, 'allow_generation': True,
+                    })
+                    self.assertTrue(entered.wait(5))
+                    status = bridge.status('skill-eta')
+                    self.assertEqual((status['skill_completed'], status['skill_total']), (2, 6))
+                    self.assertEqual(status['skill_manuals_valid'], 2)
+                    self.assertGreater(status['skill_eta_seconds'], 0)
+                finally:
+                    finish.set()
+                    bridge.skill_jobs['skill-eta'].join(10)
+
+    def test_skill_preflight_checks_cache_without_generation_and_authorized_prepare_fills_it(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = initialize(directory)
+            (home / 'manual-generator.json').write_text(json.dumps({'provider': 'mock'}))
+            bridge = WorkerBridge(home)
+            bridge.capture('skill-preflight', TOOLS)
+            bridge.jobs['skill-preflight'].join(10)
+            candidates = [
+                {'name': f'skill-{index}', 'description': 'Useful workflow', 'content': f'Body {index}'}
+                for index in range(3)
+            ]
+            checked = bridge.request_skill_preflight({'session_id': 'skill-preflight', 'candidates': candidates})
+            self.assertEqual((checked['status'], checked['missing'], checked['valid']), ('approval_required', 3, 0))
+            self.assertFalse(list((home / 'skill-cache').rglob('*.json')))
+            bridge.request_skill_preparation({
+                'session_id': 'skill-preflight', 'candidates': candidates, 'allow_generation': True,
+            })
+            bridge.skill_jobs['skill-preflight'].join(10)
+            self.assertEqual(bridge.status('skill-preflight')['skill_phase'], 'ready')
+            cached = bridge.request_skill_preflight({'session_id': 'skill-preflight', 'candidates': candidates})
+            self.assertEqual((cached['status'], cached['missing'], cached['valid']), ('ready', 0, 3))
+
     def test_onboarding_configuration_is_redacted_no_generation_and_key_rotation_needs_no_restart(self):
         with tempfile.TemporaryDirectory() as directory:
             bridge = WorkerBridge(directory)
@@ -343,6 +401,23 @@ class PluginWorkerTests(unittest.TestCase):
             self.assertEqual(result['selection']['method'], 'metadata_bm25')
             self.assertFalse((bridge.home / 'discovery-catalog.json').exists())
             self.assertFalse(list((bridge.home / 'cache').rglob('*.json')))
+
+    def test_skill_k_is_stored_and_applied_independently_from_tool_k(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bridge = WorkerBridge(directory)
+            bridge.capture('split-k', TOOLS)
+            bridge.jobs['split-k'].join(10)
+            bridge.configure('split-k', retrieval_target='both', tool_k=2, skill_k=4)
+            bridge.configure('split-k', tool_k=6)
+            status = bridge.status('split-k')
+            self.assertEqual(status['tool_k'], 6)
+            self.assertEqual(status['skill_k'], 4)
+            result = bridge.request_skill_search({'session_id': 'split-k', 'prompt': 'meeting notes',
+                'representation': 'spec', 'candidates': [
+                    {'name': f'skill-{index}', 'description': 'meeting notes and action items'}
+                    for index in range(6)]})
+            self.assertEqual(result['k'], 4)
+            self.assertEqual(len(result['selected_names']), 4)
 
     def test_skill_search_prioritizes_explicit_name_and_name_terms(self):
         with tempfile.TemporaryDirectory() as directory:

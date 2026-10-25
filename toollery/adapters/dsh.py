@@ -66,11 +66,13 @@ class SessionState:
     representation: str = "spec_manual"
     budget: str = "top_k"
     k: int = 3
+    skill_k: int = 3
     revision: int = 0
     pool_revision: int = 0
     ready: bool = False
     enabled: bool = True
     retrieval_target: str = "tools"
+    skill_representation: str = "spec_manual"
 
 
 class DSHBridge:
@@ -81,15 +83,17 @@ class DSHBridge:
     schemas and guards execution; this service only prepares and searches.
     """
 
-    def __init__(self, output_dir: Path, *, representation="spec_manual", budget="top_k", k=3,
-                 retrieval_target="tools", on_selection=None,
+    def __init__(self, output_dir: Path, *, representation="spec_manual", budget="top_k", k=3, skill_k=None,
+                 retrieval_target="tools", skill_representation="spec_manual", on_selection=None,
                  on_snapshot=None, enabled=True, state_dir=None, compact_audit=False, handlers=None):
+        skill_k = k if skill_k is None else skill_k
         self.validate_options(representation, budget, k)
+        self.validate_options(skill_representation, budget, skill_k)
         self.validate_retrieval_target(retrieval_target)
         if not isinstance(enabled, bool):
             raise ValueError("enabled must be a boolean")
         self.output_dir = output_dir
-        self.defaults = representation, budget, k, retrieval_target
+        self.defaults = representation, budget, k, skill_k, retrieval_target, skill_representation
         self.default_enabled = enabled
         self.state_dir = Path(state_dir) if state_dir else None
         self.compact_audit = compact_audit
@@ -128,9 +132,10 @@ class DSHBridge:
             if previous is not None and previous.pool.snapshot_hash != pool.snapshot_hash:
                 raise ValueError("Tool snapshot changed; prepare a new session")
             if previous is None:
-                rep, budget, k, retrieval_target = self.defaults
-                self.sessions[session_id] = SessionState(pool, representation=rep, budget=budget, k=k,
-                                                        enabled=self.default_enabled, retrieval_target=retrieval_target)
+                rep, budget, k, skill_k, retrieval_target, skill_representation = self.defaults
+                self.sessions[session_id] = SessionState(pool, representation=rep, budget=budget, k=k, skill_k=skill_k,
+                                                        enabled=self.default_enabled, retrieval_target=retrieval_target,
+                                                        skill_representation=skill_representation)
                 if self.state_dir:
                     file = self._state_file(session_id)
                     if file.is_file():
@@ -139,12 +144,18 @@ class DSHBridge:
                         self.calls.extend(saved.get('calls', []))
                         if saved.get('snapshot_hash') == pool.snapshot_hash:
                             options = saved['options']
-                            self.validate_options(options['representation'], options['budget'], options['k'])
+                            saved_k = options.get('tool_k', options['k'])
+                            saved_skill_k = options.get('skill_k', options.get('k', skill_k))
+                            self.validate_options(options['representation'], options['budget'], saved_k)
                             retrieval_target = options.get('retrieval_target', retrieval_target)
                             self.validate_retrieval_target(retrieval_target)
+                            skill_representation = options.get('skill_representation', skill_representation)
+                            self.validate_options(skill_representation, options['budget'], saved_skill_k)
                             state = self.sessions[session_id]
-                            state.representation, state.budget, state.k = options['representation'], options['budget'], options['k']
+                            state.representation, state.budget, state.k = options['representation'], options['budget'], saved_k
+                            state.skill_k = saved_skill_k
                             state.retrieval_target = retrieval_target
+                            state.skill_representation = skill_representation
                             state.enabled = options['enabled']
                             state.revision = options.get('revision', 0)
                             state.pool_revision = options.get('pool_revision', 0)
@@ -282,14 +293,18 @@ class DSHBridge:
             return {"status": "committed", "snapshot_hash": target.snapshot_hash,
                     "pool_revision": state.pool_revision, "diff": diff, "report": report}
 
-    def configure(self, session_id, *, representation=None, budget=None, k=None, enabled=None, retrieval_target=None):
+    def configure(self, session_id, *, representation=None, budget=None, k=None, tool_k=None, skill_k=None, enabled=None,
+                  retrieval_target=None, skill_representation=None):
         if enabled is not None and not isinstance(enabled, bool):
             raise ValueError("enabled must be a boolean")
         with self._lock:
             state = self.sessions[session_id]
+            count = tool_k if tool_k is not None else k if k is not None else state.k
+            skill_count = skill_k if skill_k is not None else k if k is not None else state.skill_k
             self.validate_options(representation if representation is not None else state.representation,
-                                  budget if budget is not None else state.budget,
-                                  k if k is not None else state.k)
+                                  budget if budget is not None else state.budget, count)
+            self.validate_options(skill_representation if skill_representation is not None else state.skill_representation,
+                                  budget if budget is not None else state.budget, skill_count)
             target = retrieval_target if retrieval_target is not None else state.retrieval_target
             self.validate_retrieval_target(target)
             needs_preparation = enabled is True and target != 'skills' and not state.ready
@@ -301,9 +316,12 @@ class DSHBridge:
             state = self.sessions[session_id]
             rep = representation if representation is not None else state.representation
             limit = budget if budget is not None else state.budget
-            count = k if k is not None else state.k
+            count = tool_k if tool_k is not None else k if k is not None else state.k
+            skill_count = skill_k if skill_k is not None else k if k is not None else state.skill_k
             target = retrieval_target if retrieval_target is not None else state.retrieval_target
+            skill_rep = skill_representation if skill_representation is not None else state.skill_representation
             self.validate_options(rep, limit, count)
+            self.validate_options(skill_rep, limit, skill_count)
             self.validate_retrieval_target(target)
             # Prepare before committing ON. Failure leaves OFF and its full pool
             # usable; no silent spec fallback and no partially applied settings.
@@ -311,7 +329,8 @@ class DSHBridge:
                 raise RuntimeError("Manuals and index are not ready")
             if target != 'skills' and state.ready and rep not in state.searches:
                 raise ValueError("Manuals were not prepared for this mode")
-            state.representation, state.budget, state.k, state.retrieval_target = rep, limit, count, target
+            state.representation, state.budget, state.k, state.skill_k = rep, limit, count, skill_count
+            state.retrieval_target, state.skill_representation = target, skill_rep
             if enabled is not None:
                 state.enabled = enabled
             state.revision += 1
@@ -326,7 +345,7 @@ class DSHBridge:
         state = self.sessions[session_id]
         atomic_json(self._state_file(session_id), {
             'snapshot_hash': state.pool.snapshot_hash,
-            'options': {key: getattr(state, key) for key in ('enabled', 'representation', 'budget', 'k', 'retrieval_target', 'revision', 'pool_revision')},
+            'options': {key: getattr(state, key) for key in ('enabled', 'representation', 'budget', 'k', 'skill_k', 'retrieval_target', 'skill_representation', 'revision', 'pool_revision')},
             'selections': [s for s in self.selections if s['session_id'] == session_id],
             'calls': [c for c in self.calls if c['session_id'] == session_id],
         })
@@ -341,7 +360,7 @@ class DSHBridge:
             options = payload.get('options') or {}
             representation = options.get('representation', state.representation)
             budget = options.get('budget', state.budget)
-            k = options.get('k', state.k)
+            k = options.get('tool_k', options.get('k', state.k))
             enabled = options.get('enabled', state.enabled)
             retrieval_target = options.get('retrieval_target', state.retrieval_target)
             self.validate_options(representation, budget, k)
@@ -367,7 +386,8 @@ class DSHBridge:
                 "session_id": session_id, "snapshot_hash": state.pool.snapshot_hash,
                 "prompt": prompt, "message_ids": payload.get("message_ids", []),
                 "turn": payload.get("turn"), "representation": representation,
-                "budget": budget, "k": k, "revision": state.revision,
+                "skill_representation": state.skill_representation,
+                "budget": budget, "k": k, "tool_k": k, "skill_k": state.skill_k, "revision": state.revision,
                 "pool_revision": state.pool_revision,
                 "enabled": enabled,
                 "retrieval_target": retrieval_target,
@@ -447,7 +467,9 @@ class DSHBridge:
                 'tool_names': list(state.pool.tool_ids), 'snapshot_hash': state.pool.snapshot_hash,
                 'pool_revision': state.pool_revision,
                 'representation': state.representation, 'budget': state.budget, 'k': state.k,
+                'tool_k': state.k, 'skill_k': state.skill_k,
                 'retrieval_target': state.retrieval_target,
+                'skill_representation': state.skill_representation,
                 'manuals_valid': state.preparation.get('valid', 0),
                 'last_selection': latest,
                 'turns': [{**s, 'calls': [c for c in self.calls if c['selection_id'] == s['selection_id']]}

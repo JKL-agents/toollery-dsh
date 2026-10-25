@@ -15,7 +15,9 @@ import re
 from toollery.adapters.dsh import DSHBridge, StaleRefresh, diff_pools, snapshot_pool
 from toollery.data import ToolPool, ToolRecord
 from toollery.manuals import ManualCache, PreparationError, cache_preflight
-from toollery.retrieval import BM25Index, ToolSearch, build_documents
+from toollery.retrieval import BM25Index, ToolSearch, build_documents, build_skill_documents
+from toollery.skill_manuals import (prepare_skill_manuals, skill_cache_preflight,
+                                     validate_skill_candidates)
 from toollery.storage import atomic_json, canonical, digest
 from .configuration import (default_generator, read_json, resolve_generator,
                             configured_generator, load_generator_credentials)
@@ -28,8 +30,9 @@ def initialize(directory):
     templates = {
         'manual-generator.json': json.dumps(default_generator(), indent=2) + '\n',
         'settings.json': json.dumps({'representation': 'spec_manual', 'budget': 'top_k',
-                                     'k': 3, 'workers': 8, 'enabled': True,
+                                     'k': 3, 'skill_k': 3, 'workers': 8, 'enabled': True,
                                      'retrieval_target': 'tools',
+                                     'skill_representation': 'spec_manual',
                                      'refresh_max_misses': 15}, indent=2) + '\n',
         '.env.example': '# Manual generation only. Chat credentials belong to DSH.\nTOOLLERY_MANUAL_API_KEY=\n',
     }
@@ -61,22 +64,29 @@ class WorkerBridge(DSHBridge):
         self.pending_refreshes = {}
         self.discovery_jobs = {}
         self.skill_indexes = {}
+        self.skill_jobs = {}
+        self.skill_phases = {}
+        self.skill_candidates = {}
         self.discovery_catalog = self.home / 'discovery-catalog.json'
         self.preparation_lock = threading.Lock()
         super().__init__(self.home / 'runs', enabled=False, state_dir=self.home / 'sessions',
                          representation=settings.get('representation', 'spec_manual'),
                          budget=settings.get('budget', 'top_k'), k=settings.get('k', 3),
+                         skill_k=settings.get('skill_k', settings.get('k', 3)),
                          retrieval_target=settings.get('retrieval_target', 'tools'),
+                         skill_representation=settings.get('skill_representation', 'spec_manual'),
                          handlers={'/prepare': self.request_preparation, '/release': self.release,
                                    '/generator': self.generator_settings, '/refresh': self.request_refresh,
                                    '/refresh-status': self.refresh_status, '/discover': self.request_discovery,
                                    '/discover-status': self.discovery_status, '/skill-search': self.request_skill_search,
+                                   '/skill-preflight': self.request_skill_preflight,
+                                   '/skill-prepare': self.request_skill_preparation,
                                    '/skill-observed': self.observe_skill})
 
     def generator_settings(self, payload):
         with self._lock:
             if 'settings' in payload:
-                if any(job.is_alive() for job in (*self.jobs.values(),
+                if any(job.is_alive() for job in (*self.jobs.values(), *self.skill_jobs.values(),
                         *[item['thread'] for item in self.refresh_jobs.values()],
                         *[item['thread'] for item in self.discovery_jobs.values()])):
                     return {'ok': False, 'error': 'Wait for the current cache check or generation to finish before saving.'}
@@ -90,6 +100,12 @@ class WorkerBridge(DSHBridge):
                     state.enabled = False
                     state.ready = False
                     state.searches = {}
+                    self.skill_indexes.clear()
+                    if session_id in self.skill_candidates:
+                        self.skill_phases[session_id] = self._progress_state(
+                            {'phase': 'needs_preparation', 'completed': 0,
+                             'total': len(self.skill_candidates[session_id]),
+                             'missing': len(self.skill_candidates[session_id])})
                     self._start(session_id, generate=False)
                 return {'ok': True, 'generator': view}
             return {'ok': True, 'generator': provider_view(self.home)}
@@ -122,7 +138,8 @@ class WorkerBridge(DSHBridge):
 
     def _forget_if_idle(self, session_id):
         current = threading.current_thread()
-        threads = ([self.jobs.get(session_id)] if self.phases.get(session_id, {}).get('phase') == 'preparing' else []) + [
+        threads = ([self.jobs.get(session_id)] if self.phases.get(session_id, {}).get('phase') == 'preparing' else []) + \
+            ([self.skill_jobs.get(session_id)] if self.skill_jobs.get(session_id) else []) + [
             item['thread'] for mapping in (self.refresh_jobs, self.discovery_jobs)
             for item in mapping.values() if item['session_id'] == session_id
             and item['phase'] in {'preparing', 'refreshing'}]
@@ -131,7 +148,8 @@ class WorkerBridge(DSHBridge):
             self._forget(session_id)
 
     def _forget(self, session_id):
-        for mapping in (self.sessions, self.phases, self.desired_enabled, self.jobs, self.pending_refreshes):
+        for mapping in (self.sessions, self.phases, self.desired_enabled, self.jobs, self.pending_refreshes,
+                        self.skill_phases, self.skill_candidates, self.skill_jobs):
             mapping.pop(session_id, None)
         for mapping in (self.refresh_jobs, self.discovery_jobs):
             for key in [key for key, item in mapping.items() if item['session_id'] == session_id]:
@@ -503,81 +521,200 @@ class WorkerBridge(DSHBridge):
             'manual_report': report, 'catalog_path': str(self.discovery_catalog),
         }
 
+    def request_skill_preparation(self, payload):
+        """Start explicitly authorized generation for the latest native catalog."""
+        session_id = payload.get('session_id')
+        if not isinstance(session_id, str) or not session_id:
+            raise ValueError('A skill preparation session is required')
+        if payload.get('allow_generation') is not True:
+            raise ValueError('Explicit generation permission required')
+        candidates = validate_skill_candidates(payload.get('candidates', []), require_content=True)
+        with self._lock:
+            current = self.skill_jobs.get(session_id)
+            if current and current.is_alive():
+                return {'accepted': False, 'reason': 'skill_preparation_in_progress'}
+            self.skill_candidates[session_id] = candidates
+            phase = self._progress_state({'phase': 'preparing', 'completed': 0,
+                                          'total': len(candidates), 'missing': len(candidates),
+                                          '_generation_total': len(candidates),
+                                          '_generation_completed': 0})
+            self.skill_phases[session_id] = phase
+            job = threading.Thread(target=self._prepare_skills, args=(session_id, candidates), daemon=True)
+            self.skill_jobs[session_id] = job
+            job.start()
+        return {'accepted': True, 'total': len(candidates)}
+
+    def request_skill_preflight(self, payload):
+        """Check body-derived manual caches without making provider calls."""
+        session_id = payload.get('session_id')
+        if not isinstance(session_id, str) or not session_id:
+            raise ValueError('A skill preflight session is required')
+        candidates = validate_skill_candidates(payload.get('candidates', []), require_content=True)
+        with self._lock:
+            current = self.skill_jobs.get(session_id)
+            if current and current.is_alive():
+                return {'status': 'preparing', 'total': len(candidates)}
+            self.skill_candidates[session_id] = candidates
+        try:
+            with self.preparation_lock:
+                generator = self._configured_generator(generate=False)
+                report = skill_cache_preflight(candidates, generator, ManualCache(self.home / 'skill-cache'))
+            ready = report['missing'] == 0 and not report['failures']
+            report.update(ready=ready, manuals_prepared=ready, representation='manual')
+            phase = 'ready' if ready else 'approval_required' if not report['failures'] else 'preflight_failed'
+            error = '' if ready else ('Skill manuals require explicit generation approval.'
+                                      if phase == 'approval_required' else 'Some skill bodies could not be checked.')
+        except Exception as failure:
+            report = {'total': len(candidates), 'valid': 0, 'missing': len(candidates),
+                      'failures': [{'reason': type(failure).__name__}]}
+            ready, phase = False, 'preflight_failed'
+            error = 'Skill manual cache check failed. Check the local worker and manual-generation settings.'
+        with self._lock:
+            self.skill_phases[session_id] = self._progress_state({
+                'phase': phase, 'completed': report.get('valid', 0),
+                'total': len(candidates), 'missing': report.get('missing', 0),
+                'valid': report.get('valid', 0), 'report': report, 'error': error,
+            })
+        return {'status': phase, **report}
+
+    def _prepare_skills(self, session_id, candidates):
+        try:
+            with self.preparation_lock:
+                generator = self._configured_generator(generate=True)
+                cache = ManualCache(self.home / 'skill-cache')
+
+                def progress(done, total, generated, hits, failures):
+                    with self._lock:
+                        phase = self.skill_phases.get(session_id)
+                        if phase:
+                            phase.update(completed=done, total=total, missing=failures,
+                                         valid=generated + hits,
+                                         _generation_completed=done, _generation_total=total)
+                            phase.update(self._timing(phase))
+
+                report = prepare_skill_manuals(
+                    candidates, generator, cache, cache_only=False, progress=progress)
+            with self._lock:
+                self.skill_indexes.clear()
+                self.skill_phases[session_id] = self._progress_state(
+                    {'phase': 'ready', 'completed': len(candidates), 'total': len(candidates),
+                     'missing': 0, 'report': report.report})
+        except PreparationError as error:
+            with self._lock:
+                self.skill_phases[session_id] = self._progress_state(
+                    {'phase': 'needs_preparation', 'completed': error.report.get('valid', 0),
+                     'total': error.report.get('total', len(candidates)),
+                     'missing': error.report.get('total', len(candidates)) - error.report.get('valid', 0),
+                     'report': error.report,
+                     'error': 'Some skill manuals could not be generated. Completed manuals are cached.'})
+        except Exception as error:
+            with self._lock:
+                self.skill_phases[session_id] = self._progress_state(
+                    {'phase': 'needs_preparation', 'completed': 0, 'total': len(candidates),
+                     'missing': len(candidates), 'error': f'Skill manual preparation failed ({type(error).__name__}).'})
+        finally:
+            with self._lock:
+                phase = self.skill_phases.get(session_id)
+                if phase:
+                    phase.update(self._timing(phase), eta_seconds=None)
+                self._forget_if_idle(session_id)
+
+    @staticmethod
+    def _skill_metadata(item):
+        return {key: item[key] for key in ('name', 'description', 'when_to_use', 'tags') if key in item}
+
     def request_skill_search(self, payload):
-        """Search invocation-neutral skill metadata; never loads skill bodies."""
+        """Search native skills using catalog fields and cached body manuals."""
         prompt = payload.get('prompt')
-        candidates = payload.get('candidates')
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError('A skill search prompt is required')
-        if not isinstance(candidates, list) or len(candidates) > 4096:
-            raise ValueError('Skill metadata must contain 0..4096 candidates')
-        normalized, documents, seen = [], {}, set()
-        for item in candidates:
-            if not isinstance(item, dict) or not isinstance(item.get('name'), str) or not item['name'].strip():
-                raise ValueError('Invalid skill metadata')
-            name = item['name'].strip()
-            if name in seen:
-                raise ValueError('Skill metadata names must be unique')
-            description = item.get('description')
-            # Native DSH permits skills with no description; their names still
-            # provide useful routing terms. An empty eligible pool is valid too.
-            if not isinstance(description, str):
-                raise ValueError('Skill metadata descriptions must be strings')
-            seen.add(name)
-            record = {'name': name, 'description': description}
-            for key in ('when_to_use', 'tags'):
-                if key in item and item[key] is not None:
-                    record[key] = item[key]
-            normalized.append(record)
-            tags = record.get('tags', '')
-            if isinstance(tags, list): tags = ' '.join(str(value) for value in tags)
-            # Repeat the stable skill name so a direct capability/name match
-            # has more influence than a common word in a long description.
-            documents[name] = '\n'.join(value for value in (name, name, name, description,
-                                                               record.get('when_to_use', ''), str(tags)) if value)
-        key = digest(normalized)
-        budget, k = payload.get('budget', 'top_k'), payload.get('k', 3)
-        self.validate_options('spec', budget, k)
+        representation = payload.get('representation', 'spec')
+        session_id = payload.get('session_id')
         with self._lock:
-            index = self.skill_indexes.get(key)
+            state = self.sessions.get(session_id) if isinstance(session_id, str) else None
+            default_k = state.skill_k if state else 3
+        budget, k = payload.get('budget', 'top_k'), payload.get('skill_k', payload.get('k', default_k))
+        self.validate_options(representation, budget, k)
+        require_content = representation != 'spec'
+        candidates = validate_skill_candidates(payload.get('candidates'), require_content=require_content)
+        if isinstance(session_id, str):
+            with self._lock:
+                self.skill_candidates[session_id] = candidates
+
+        started = time.perf_counter()
+        manuals = None
+        if representation == 'spec':
+            report = {'ready': True, 'manual_kind': 'skill', 'total': len(candidates),
+                      'valid': len(candidates), 'missing': 0, 'generated': 0,
+                      'generation_calls': 0, 'proxy_query_count': 3,
+                      'representation': representation, 'manuals_prepared': False}
+        else:
+            generator = self._configured_generator(generate=False)
+            cache = ManualCache(self.home / 'skill-cache')
+            preflight = skill_cache_preflight(candidates, generator, cache)
+            if preflight['missing'] or preflight['failures']:
+                with self._lock:
+                    if isinstance(session_id, str):
+                        self.skill_phases[session_id] = self._progress_state({
+                            'phase': 'approval_required', 'completed': preflight['valid'],
+                            'total': preflight['total'], 'missing': preflight['missing'],
+                            'report': preflight,
+                            'error': 'Skill manuals require explicit generation approval.'})
+                return {'status': 'approval_required', 'prompt': prompt,
+                        'representation': representation, 'candidate_count': len(candidates),
+                        'missing': preflight['missing'],
+                        'missing_skill_names': preflight['missing_skill_names'],
+                        'manual_report': preflight}
+            try:
+                prepared = prepare_skill_manuals(candidates, generator, cache, cache_only=True)
+                manuals, report = prepared.records, {
+                    **prepared.report, 'representation': representation, 'manuals_prepared': True}
+            except PreparationError as error:
+                return {'status': 'failed', 'error': 'skill_manual_preparation_failed',
+                        'manual_report': error.report}
+        documents = build_skill_documents(candidates, representation, manuals)
+        index_key = digest(
+            [representation, [self._skill_metadata(item) for item in candidates]]
+            if representation == 'spec' else
+            [representation, [(item['name'], manuals[item['name']]['manual_key']) for item in candidates]])
+        with self._lock:
+            index = self.skill_indexes.get(index_key)
             if index is None and documents:
                 index = BM25Index(documents)
-                self.skill_indexes[key] = index
+                self.skill_indexes[index_key] = index
                 if len(self.skill_indexes) > 8:
                     self.skill_indexes.pop(next(iter(self.skill_indexes)))
-        metadata = {item['name']: item for item in normalized}
-        # If the user names an available skill exactly, keep it in the result
-        # even when generic terms in other descriptions score higher. BM25
-        # orders the remaining slots; exact matches also respect the k budget.
-        exact = [item['name'] for item in normalized
+        metadata = {item['name']: self._skill_metadata(item) for item in candidates}
+        exact = [item['name'] for item in candidates
                  if re.search(r'(?<![a-z0-9_-])' + re.escape(item['name'].casefold())
                              + r'(?![a-z0-9_-])', prompt.casefold())]
-        started = time.perf_counter()
         if budget == 'all':
             ranked = index.search(prompt, limit=None) if index is not None else []
         else:
             exact = exact[:k]
-            # Fetch k before deduplication: exact matches can also occur among
-            # the BM25 hits, and must not consume the remaining slots twice.
             ranked = index.search(prompt, limit=k) if index is not None and k > len(exact) else []
         exact_scores = {hit.tool_id: hit.score for hit in
-                        index.search(prompt, limit=len(exact), eligible_ids=exact)} if exact else {}
-        exact_hits = [{'name': name, 'description': metadata[name]['description'],
-                       **({'when_to_use': metadata[name]['when_to_use']} if 'when_to_use' in metadata[name] else {}),
-                       **({'tags': metadata[name]['tags']} if 'tags' in metadata[name] else {}),
-                       'score': exact_scores.get(name, 0.0), 'exact_name_match': True} for name in exact]
+                        index.search(prompt, limit=len(exact), eligible_ids=exact)} if exact and index else {}
+        exact_hits = [{**metadata[name], 'score': exact_scores.get(name, 0.0),
+                       'exact_name_match': True} for name in exact]
         selected = exact_hits
         selected_names = set(exact)
         selected.extend({**metadata[hit.tool_id], 'score': hit.score}
                         for hit in ranked if hit.tool_id not in selected_names
                         and (budget == 'all' or len(selected) < k))
-        # BM25 may return fewer than k positive-score hits; preserve its normal
-        # top-k behavior and do not pad with zero-score skills.
+        if isinstance(session_id, str):
+            with self._lock:
+                self.skill_phases[session_id] = self._progress_state(
+                    {'phase': 'ready', 'completed': len(candidates), 'total': len(candidates),
+                     'missing': 0, 'report': report})
+        method_base = 'metadata_bm25' if representation == 'spec' else f'{representation}_bm25'
         return {'status': 'ranked', 'prompt': prompt, 'budget': budget, 'k': k,
-                'candidate_count': len(normalized), 'catalog_hash': key,
-                'selection': {'method': 'metadata_bm25_exact_name' if exact else 'metadata_bm25',
-                              'candidate_count': len(normalized), 'k': k},
+                'representation': representation, 'candidate_count': len(candidates),
+                'catalog_hash': index_key,
+                'selection': {'method': method_base + ('_exact_name' if exact else ''),
+                              'candidate_count': len(candidates), 'k': k},
                 'selected_names': [item['name'] for item in selected], 'selected': selected,
+                'manual_report': report,
                 'retrieval_ms': (time.perf_counter() - started) * 1000}
 
     def _refresh(self, job, target, payload):
@@ -755,7 +892,30 @@ class WorkerBridge(DSHBridge):
             public_phase = {key: value for key, value in phase.items() if not key.startswith('_')}
             if phase.get('phase') in {'preparing', 'refreshing'}:
                 public_phase.update(self._timing(phase))
-            return {**super().status(session_id), **public_phase,
+            skill_phase = self.skill_phases.get(session_id, {})
+            skill_report = skill_phase.get('report', {})
+            skill_public = {key: value for key, value in skill_phase.items() if not key.startswith('_')}
+            if skill_phase.get('phase') == 'preparing':
+                skill_public.update(self._timing(skill_phase))
+            base_status = super().status(session_id)
+            skills_active = (base_status.get('retrieval_target') in {'skills', 'both'}
+                             and base_status.get('skill_representation') != 'spec')
+            skill_ready = (not skills_active or
+                           (skill_phase.get('phase') == 'ready' and skill_report.get('ready') is True))
+            return {**base_status, **public_phase, **{
+                    'ready': bool(base_status.get('ready')) and skill_ready,
+                    'skill_phase': skill_phase.get('phase', 'preflight_required'),
+                    'skill_manuals_valid': skill_phase.get('valid', skill_report.get('valid', 0)),
+                    'skill_manuals_prepared': bool(skill_report.get('ready'))
+                    and skill_report.get('manuals_prepared', True),
+                    'skill_manual_count': skill_report.get('total', len(self.skill_candidates.get(session_id, []))),
+                    'skill_missing': skill_phase.get('missing', 0),
+                    'skill_error': skill_phase.get('error', ''),
+                    'skill_completed': skill_phase.get('completed', 0),
+                    'skill_total': skill_phase.get('total', len(self.skill_candidates.get(session_id, []))),
+                    **{f'skill_{key}': value for key, value in skill_public.items()
+                       if key not in {'phase', 'completed', 'total', 'missing', 'error'}},
+                },
                     'manuals_valid': (phase.get('report', {}).get('valid', 0)
                                       if phase.get('report', {}).get('manuals_prepared') is not False else 0),
                     'manuals_prepared': phase.get('report', {}).get('manuals_prepared', True),

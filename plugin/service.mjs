@@ -24,6 +24,8 @@ export class ToolleryService {
       ? Math.max(1000, Math.min(1800000, config.refreshTimeoutMs)) : 120000
     this.child = null
     this.transport = null
+    this.skillCatalogLoaders = new Map()
+    this.skillPreflightJobs = new Map()
     this.disposed = false
   }
 
@@ -126,13 +128,37 @@ export class ToolleryService {
     })
   }
 
-  dispose() { this.disposed = true; this.sessions.clear(); return this.stop() }
+  dispose() {
+    this.disposed = true
+    this.skillCatalogLoaders.clear()
+    this.skillPreflightJobs.clear()
+    this.sessions.clear()
+    return this.stop()
+  }
   enabled(id) { return this.sessions.get(id)?.enabled === true }
   snapshotHash(id) { return this.sessions.get(id)?.snapshot_hash }
   poolRevision(id) { return this.sessions.get(id)?.pool_revision || 0 }
   unregister(id) {
     this.sessions.delete(id)
+    this.skillCatalogLoaders.delete(id)
+    this.skillPreflightJobs.delete(id)
     if (this.transport) void this.post('/release', { session_id: id }).catch(() => {})
+  }
+
+  registerSkillCatalogLoader(id, loader) {
+    if (typeof loader !== 'function') throw new TypeError('A native skill catalog loader is required.')
+    this.skillCatalogLoaders.set(id, loader)
+  }
+
+  unregisterSkillCatalogLoader(id) { this.skillCatalogLoaders.delete(id) }
+
+  invalidateSkillPreflight(id) {
+    const targets = id === undefined ? this.sessions.values() : [this.sessions.get(id)].filter(Boolean)
+    for (const state of targets) {
+      state.skillPreflightHash = null
+      state.skillPreflightResult = null
+      state.skillPreflightError = null
+    }
   }
   offFile(id) { return join(this.directory, 'overrides', createHash('sha256').update(id).digest('hex') + '.off') }
   unsupported(id, reason) {
@@ -141,7 +167,7 @@ export class ToolleryService {
   async register(id, schemas) {
     this.sessions.set(id, { schemas: structuredClone(schemas), enabled: false, turns: [], localTurns: [],
       localOff: existsSync(this.offFile(id)), phase: 'needs_preparation', pool_revision: 0,
-      retrieval_target: 'tools' })
+      retrieval_target: 'tools', skill_representation: 'spec_manual', skillCandidates: null })
     if (this.transport) await this.capture(id)
     return {}
   }
@@ -153,8 +179,14 @@ export class ToolleryService {
         discovery: { complete: true, source: 'host-agent-scope' } })
       Object.assign(state, snapshot)
       if (state.localOff) await this.post('/configure', { session_id: id, options: { enabled: false } })
+      const status = await this.post('/status', { session_id: id })
+      Object.assign(state, status)
       delete state.error
     } catch { state.error = 'Could not capture this tool snapshot. Restart DSH to retry.' }
+    if (state.enabled && ['skills', 'both'].includes(state.retrieval_target)
+        && state.skill_representation !== 'spec' && this.skillCatalogLoaders.has(id)) {
+      try { await this.preflightSkills(id) } catch (error) { state.skillPreflightError = error.message }
+    }
   }
 
   async post(path, payload, signal, { timeoutMs } = {}) {
@@ -198,19 +230,38 @@ export class ToolleryService {
     if (!state) throw new Error('Start a new native conversation to use Toollery.')
     let error
     try { await this.settings(id) } catch (failure) { error = failure.message }
+    if (this.transport && state.enabled !== false && ['skills', 'both'].includes(state.retrieval_target)
+        && state.skill_representation !== 'spec' && state.skill_phase !== 'preparing'
+        && !state.skillPreflightResult) {
+      try { await this.preflightSkills(id) } catch (failure) { error ||= failure.message }
+    }
     const turns = [...(state.turns || []), ...(state.localTurns || [])].sort((a, b) => (a.turn ?? 0) - (b.turn ?? 0))
+    const toolsReady = state.retrieval_target === 'skills' || !state.enabled || !!state.retrieval_ready
+    const skillsTarget = ['skills', 'both'].includes(state.retrieval_target)
+    const skillsReady = !state.enabled || !skillsTarget || state.skill_representation === 'spec' || state.skill_manuals_prepared === true
     return {
-      enabled: state.enabled, ready: state.retrieval_target === 'skills' || !state.enabled || !!state.retrieval_ready,
+      enabled: state.enabled, ready: toolsReady && skillsReady,
       retrieval_ready: !!state.retrieval_ready, representation: state.representation || 'spec_manual',
+      skill_representation: state.skill_representation || 'spec_manual',
       budget: state.budget || 'top_k', k: state.k || 3,
+      tool_k: state.tool_k ?? state.k ?? 3, skill_k: state.skill_k ?? state.k ?? 3,
       retrieval_target: state.retrieval_target || 'tools',
       tool_count: state.tool_count ?? state.schemas?.length ?? 0,
       tool_names: state.tool_names ?? state.schemas?.map(tool => tool.name) ?? [],
       manuals_valid: state.manuals_valid || 0, manuals_prepared: state.manuals_prepared,
+      skill_phase: state.skillPreflightError ? 'preflight_failed' : state.skill_phase || 'preflight_required',
+      skill_manuals_valid: state.skill_manuals_valid || 0,
+      skill_manuals_prepared: state.skill_manuals_prepared === true,
+      skill_manual_count: state.skill_manual_count || 0,
+      skill_missing: state.skill_missing || 0,
+      skill_error: state.skillPreflightError || state.skill_error || '',
       turns, last_selection: turns.at(-1),
       phase: state.phase === 'unsupported' ? 'unsupported' : this.phase === 'ready' ? state.phase : this.phase,
       error: error || (this.phase !== 'ready' ? this.message : state.error) || '', completed: state.completed, total: state.total,
       missing: state.missing, pending_tool_count: state.pending_tool_count,
+      skill_completed: state.skill_completed, skill_total: state.skill_total,
+      skill_elapsed_seconds: state.skill_elapsed_seconds, skill_eta_seconds: state.skill_eta_seconds,
+      skill_rate_per_second: state.skill_rate_per_second,
       elapsed_seconds: state.elapsed_seconds, eta_seconds: state.eta_seconds,
       rate_per_second: state.rate_per_second,
       configuration_directory: this.directory,
@@ -222,7 +273,12 @@ export class ToolleryService {
     const result = await this.post('/generator', { settings })
     if (!result.ok) throw new Error(result.error || 'Manual settings could not be saved.')
     // Worker invalidates/rechecks each session's indexes without API calls.
-    for (const [id, state] of this.sessions) if (state.schemas) await this.settings(id)
+    for (const [id, state] of this.sessions) if (state.schemas) {
+      state.skillPreflightHash = null
+      state.skillPreflightResult = null
+      state.skillPreflightError = null
+      await this.settings(id)
+    }
     return result.generator
   }
 
@@ -239,18 +295,103 @@ export class ToolleryService {
       return
     }
     await this.post('/configure', { session_id: id, options })
+    if (options.retrieval_target !== undefined || options.skill_representation !== undefined) {
+      state.skillPreflightHash = null
+      state.skillPreflightResult = null
+      state.skillPreflightError = null
+    }
     if (options.enabled === true) {
       delete state.localOff
       rmSync(this.offFile(id), { force: true })
     }
     Object.assign(state, await this.post('/status', { session_id: id }))
     if (state.localOff) state.enabled = false
+    if (state.enabled !== false && ['skills', 'both'].includes(state.retrieval_target)
+        && state.skill_representation !== 'spec') {
+      try {
+        await this.preflightSkills(id)
+        Object.assign(state, await this.post('/status', { session_id: id }))
+      } catch (error) {
+        state.skillPreflightError = error.message
+        state.skill_phase = 'preflight_failed'
+      }
+    }
   }
 
   async prepare(id) {
     const state = this.sessions.get(id)
     if (!state?.schemas || !state.snapshot_hash) throw new Error('Set up the worker and capture a native tool pool first.')
     return this.post('/prepare', { session_id: id, allow_generation: true })
+  }
+
+  async prepareSkills(id) {
+    const state = this.sessions.get(id)
+    if (!state?.schemas || !state.snapshot_hash) throw new Error('Set up the worker and capture a native tool pool first.')
+    if ((state.skill_representation || 'spec_manual') === 'spec') {
+      return { accepted: false, reason: 'spec_representation_does_not_use_manuals' }
+    }
+    const preflight = await this.preflightSkills(id, { force: true, ignoreTarget: true })
+    if (preflight.status === 'ready') return { accepted: false, reason: 'already_prepared' }
+    if (preflight.status === 'preparing') return { accepted: false, reason: 'skill_preparation_in_progress' }
+    if (preflight.status === 'preflight_failed') throw new Error(state.skillPreflightError || 'Skill manual cache check failed.')
+    const result = await this.post('/skill-prepare', {
+      session_id: id, candidates: state.skillCandidates, allow_generation: true,
+    })
+    if (result.accepted) {
+      state.skillPreflightHash = null
+      state.skillPreflightResult = null
+    }
+    return result
+  }
+
+  async checkSkillManuals(id) {
+    return this.preflightSkills(id, { force: true })
+  }
+
+  async preflightSkills(id, { signal, force = false, ignoreTarget = false } = {}) {
+    const state = this.sessions.get(id)
+    if (!state) throw new Error('This session is not managed by Toollery.')
+    if (!ignoreTarget && (state.skill_representation === 'spec' || !['skills', 'both'].includes(state.retrieval_target))) {
+      return { status: 'ready', missing: 0, total: 0 }
+    }
+    if (force) {
+      state.skillPreflightHash = null
+      state.skillPreflightResult = null
+      state.skillPreflightError = null
+    }
+    const loader = this.skillCatalogLoaders.get(id)
+    if (!loader) throw new Error('The native skill catalog is not available yet.')
+    const active = this.skillPreflightJobs.get(id)
+    if (active) return active
+    state.skill_phase = 'checking'
+    state.skillPreflightError = null
+    const job = (async () => {
+      try {
+        const candidates = await loader({ loadBodies: true, signal })
+        state.skillCandidates = structuredClone(candidates)
+        const fingerprint = createHash('sha256').update(JSON.stringify(state.skillCandidates)).digest('hex')
+        if (state.skillPreflightHash === fingerprint && state.skillPreflightResult) return state.skillPreflightResult
+        const result = await this.post('/skill-preflight', {
+          session_id: id, candidates: state.skillCandidates,
+        }, signal, { timeoutMs: 120000 })
+        Object.assign(state, await this.post('/status', { session_id: id }, signal))
+        if (result.status !== 'preparing') {
+          state.skillPreflightHash = fingerprint
+          state.skillPreflightResult = result
+        }
+        state.skillPreflightError = result.status === 'preflight_failed'
+          ? 'Some skill bodies could not be checked. Review the catalog and retry.' : null
+        return result
+      } catch (error) {
+        state.skill_phase = 'preflight_failed'
+        state.skillPreflightError = error.message
+        state.skillPreflightResult = { status: 'preflight_failed' }
+        throw error
+      }
+    })()
+    this.skillPreflightJobs.set(id, job)
+    try { return await job }
+    finally { if (this.skillPreflightJobs.get(id) === job) this.skillPreflightJobs.delete(id) }
   }
 
   /**
@@ -271,7 +412,7 @@ export class ToolleryService {
       candidates: structuredClone(candidates),
       representation: options.representation ?? state.representation ?? 'spec_manual',
       budget: options.budget ?? state.budget ?? 'top_k',
-      k: options.k ?? state.k ?? 3,
+      k: options.tool_k ?? options.k ?? state.tool_k ?? state.k ?? 3,
       max_auto_tools: options.maxAutoTools ?? options.max_auto_tools ?? state.refresh_max_misses ?? 15,
       allow_generation: options.allowGeneration === true || options.allow_generation === true,
       request_id: options.requestId || undefined,
@@ -307,15 +448,29 @@ export class ToolleryService {
 
   discoverCandidates(...args) { return this.rankCandidates(...args) }
 
-  /**
-   * Rank DSH skill metadata without loading skill bodies or generating manuals.
-   * The host remains responsible for loading the selected skills through its
-   * normal skill service after this metadata-only projection.
-   */
+  /** Rank a native skill catalog using cached body-derived manuals. */
   async rankSkills(id, prompt, summaries, options = {}, signal) {
     if (!Array.isArray(summaries)) throw new Error('Skill summaries must be an array.')
-    return this.post('/skill-search', { session_id: id, prompt, candidates: summaries,
-      budget: options.budget || 'top_k', k: options.k || 3 }, signal)
+    const state = this.sessions.get(id)
+    const representation = options.representation || state?.skill_representation || state?.representation || 'spec'
+    const candidates = structuredClone(summaries)
+    if (state) state.skillCandidates = candidates
+    const result = await this.post('/skill-search', { session_id: id, prompt, candidates,
+      representation, budget: options.budget || state?.budget || 'top_k',
+      skill_k: options.skill_k ?? options.k ?? state?.skill_k ?? state?.k ?? 3 }, signal)
+    if (result.status === 'approval_required') {
+      const error = new Error('Skill manuals require explicit generation approval. Open Toollery and generate the missing manuals, then resubmit the prompt.')
+      error.code = 'skill_approval_required'
+      error.detail = result
+      throw error
+    }
+    if (result.status === 'failed') {
+      const error = new Error('Skill manual preparation failed. Check the manual model, endpoint and API key.')
+      error.code = result.error || 'skill_manual_preparation_failed'
+      error.detail = result
+      throw error
+    }
+    return result
   }
 
   async recordSkillSelection(payload) {
@@ -451,7 +606,10 @@ export class ToolleryService {
     const state = this.sessions.get(id)
     const record = { session_id: id, selection_id: randomUUID(), turn, enabled: options.enabled === true,
       representation: options.representation || state.representation || 'spec_manual',
-      budget: options.budget || state.budget || 'top_k', k: options.k || state.k || 3,
+      skill_representation: options.skill_representation || state.skill_representation || 'spec_manual',
+      budget: options.budget || state.budget || 'top_k', k: options.tool_k ?? options.k ?? state.tool_k ?? state.k ?? 3,
+      tool_k: options.tool_k ?? options.k ?? state.tool_k ?? state.k ?? 3,
+      skill_k: options.skill_k ?? state.skill_k ?? state.k ?? 3,
       retrieval_target: options.retrieval_target || state.retrieval_target || 'tools',
       selected_names: schemas.map(tool => tool.name), model_tool_names: schemas.map(tool => tool.name),
       full_pool_count: new Set([...(hostSchemas || state.schemas), ...schemas].map(tool => tool.name)).size,

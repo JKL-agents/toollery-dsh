@@ -47,11 +47,15 @@ test('bundled worker upgrade clears only stale Toollery files and metadata', () 
 })
 
 test('skill projection keeps metadata only and preserves the native loader catalog shape', () => {
+  const longDescription = '  ' + 'A '.repeat(260) + '  '
   const summaries = skillCandidates([
     { name: 'office-xlsx', description: 'Work with spreadsheets', whenToUse: 'Use for charts', invocation: { modelInvocable: true } },
+    { name: 'long-description', description: longDescription, invocation: { modelInvocable: true } },
     { name: 'private-skill', description: 'Do not expose', invocation: { modelInvocable: false } },
   ])
-  assert.deepEqual(summaries.map(item => item.name), ['office-xlsx'])
+  assert.deepEqual(summaries.map(item => item.name), ['office-xlsx', 'long-description'])
+  assert.equal(summaries[1].description.length, 500)
+  assert.equal(summaries[1].description.endsWith('...'), true)
   const message = { content: [{ type: 'text', text: 'full catalog' }], source: {
     kind: 'skill-catalog', entries: [{ name: 'office-xlsx', description: 'Work with spreadsheets' },
       { name: 'office-docs', description: 'Work with documents' }], update: true,

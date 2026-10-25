@@ -1,6 +1,6 @@
 # Existing DSH plugin installation
 
-The v0.3 plugin is an official-format DSH bundle. The standalone Windows launcher remains available as a separate demo. Installing the plugin does not install DSH again or replace an existing profile.
+The v0.3.1 plugin is an official-format DSH bundle. The standalone Windows launcher remains available as a separate demo. Installing the plugin does not install DSH again or replace an existing profile.
 
 ## Install
 
@@ -24,11 +24,13 @@ Download the matching `.tgz` asset from the [latest GitHub release](https://gith
 
 1. After installing by package name or archive, enable Toollery and restart if DSH requests it.
 2. Toollery checks the worker automatically when the plugin starts. If DSH's bundled Python or an existing Python 3.12+ is available, it installs the embedded worker wheel locally without prompting. If no usable Python is available, open Toollery's plugin details and select **Set up local worker**; Windows x64 users without Python can first check **Allow private Python download if needed**. The status shows setup stages; the first runtime download may take several minutes. No model calls occur during setup.
-3. For tool retrieval or `both`, save your model, OpenAI Chat Completions-compatible API base URL and key in **Manual-generation model**. Defaults are `deepseek-flash` and `https://api.deepseek.com`. Saving checks cache readiness without generating manuals. Skills-only retrieval does not need these credentials.
-4. Start a **new native conversation**. For tool retrieval or `both`, its Toollery panel shows the full pool and valid/missing manual counts; if DSH is still showing its new-chat landing page, send a harmless greeting to create the session, then check the API/charges confirmation and select **Generate missing manuals (uses API)**. Tool specifications are sent to the chosen manual provider. Three proxy queries are generated per tool; retries can add requests. For skills-only retrieval, set Target to `skills` and use the native skill catalog without preparation. Progress is shown while tool preparation runs.
+3. For any tool or skill representation using manuals (`manual` or `spec_manual`), save your model, OpenAI Chat Completions-compatible API base URL and key in **Manual-generation model**. Defaults are `deepseek-flash` and `https://api.deepseek.com`. Saving checks cache readiness without generating manuals. `spec` representations do not need these credentials.
+4. Start a **new native conversation**. For tool retrieval or `both`, its Toollery panel shows the full pool and valid/missing tool-manual counts; if DSH is still showing its new-chat landing page, send a harmless greeting to create the session, then check the API/charges confirmation and select **Generate missing manuals (uses API)**. Tool specifications are sent to the chosen manual provider. Three proxy queries are generated per tool; retries can add requests. For skills, set Target to `skills` and choose the skill representation. In a manual-based skill mode, Toollery checks the local cache before submission and loads eligible bodies through DSH's native loader only if entries are missing. The composer asks once for explicit approval to **Generate missing skill manuals (uses API)**; the draft stays there and can be sent when preparation completes. Progress is shown while either preparation job runs.
 5. When ready, try a prompt using your existing tools. Inspect selected/called tools, change k, or switch OFF. The plugin adds no toy/demo tools to your agent.
 
-No `.env` editing or standalone launcher is required. Chat remains usable with Toollery OFF while setup is incomplete. An explicit OFF choice remains OFF after preparation; otherwise successful preparation enables the default ON / `spec_manual` / top-k / k=3 configuration.
+No `.env` editing or standalone launcher is required. Chat remains usable with Toollery OFF while setup is incomplete. An explicit OFF choice remains OFF after preparation; otherwise successful preparation enables the default ON / `spec_manual` / top-k configuration with tool k=3 and skill k=3.
+
+Tool and skill top-k values are independent. The panel shows one k field for the active target and separate tool/skill fields for `both`; **Update k** applies both displayed values together in `both`. Use `/toollery tool-k N` or `/toollery skill-k N`; the compatibility command `/toollery k N` updates both.
 
 ### CLI alternative and environment
 
@@ -61,7 +63,7 @@ For a complete optional DSH bundle, installation steps, prompts and skill guidan
 
 Register tools through DSH's normal MCP/Cordis sources. Toollery captures the current agent's eligible host schemas; it does not discover executors or bypass restrictions. A provider should expose a stable unique name, description, JSON `parameters`, and a host-owned executor. Configure and finish loading the source before creating the conversation; later additions can be reconciled on a later turn.
 
-With DSH's filesystem skill provider, add a direct `<name>/SKILL.md` directory bundle or `<name>.md` file under project `.dsh/skills` / `.agents/skills`, user `~/.dsh/skills` / `~/.agents/skills`, or a configured `customSkillDirs` root. Use YAML frontmatter with required `name` and `description`, plus optional `whenToUse`, `metadata`, `disable-model-invocation`, and `user-invocable`. DSH owns discovery and full-body loading; Toollery sends only the current model-visible summaries to its local skill index. After adding a file, wait for DSH's watcher and use a new turn so the frozen selection is rebuilt.
+With DSH's filesystem skill provider, add a direct `<name>/SKILL.md` directory bundle or `<name>.md` file under project `.dsh/skills` / `.agents/skills`, user `~/.dsh/skills` / `~/.agents/skills`, or a configured `customSkillDirs` root. Use YAML frontmatter with required `name` and `description`, plus optional `whenToUse`, `metadata`, `disable-model-invocation`, and `user-invocable`. DSH owns discovery, permissions and full-body loading. In `spec` mode Toollery sends only the current model-visible summaries to its local skill index; in manual modes it asks DSH's scoped loader for the body solely to generate cached local intent queries. After adding a file, wait for DSH's watcher and use a new turn so the frozen selection is rebuilt.
 
 An optional provider can use the plugin as a local retrieval service when it has fetched a batch of possible tools from its own catalog:
 
@@ -87,10 +89,10 @@ Files in `<current profile directory>/toollery/`:
 | `manual-generator.json` | Manual model, endpoint, driver and generation settings |
 | `manual-credentials.json` | API key saved by the UI; never returned to the browser |
 | `.env` | Optional manual API key for advanced configuration |
-| `settings.json` | Defaults: representation, budget, k, workers (1–8), enabled, refresh_max_misses (15) |
+| `settings.json` | Defaults: tool/skill representations, retrieval target, budget, k, workers (1–8), enabled, refresh_max_misses (15) |
 | `worker.json` / `venv/` | Locally installed Python worker |
 | `runtime/` | Optional private uv/Python/download cache on Windows x64 |
-| `cache/` | Content- and generation-contract-addressed manual entries |
+| `cache/` / `skill-cache/` | Content- and generation-contract-addressed tool and native-skill manual entries |
 | `sessions/` / `runs/` | Session settings and local tool/preparation observations |
 | `overrides/` | Explicit OFF choices, usable even without the worker |
 
@@ -106,17 +108,17 @@ TOOLLERY_MANUAL_API_KEY=your-manual-generation-key
 
 DSH continues using its own chat configuration and credentials. They can belong to a different provider/model. Toollery does not read or change DSH's chat settings. See [configuration](configuration.md) for the generator contract and cache identities. Do not commit local configuration containing credentials.
 
-Select **Generate missing manuals (uses API)** or send `/toollery prepare`. This explicitly permits generation API calls for missing/stale tools. Worker concurrency defaults to 8, adjustable from 1 to 8 in `settings.json` before starting DSH. Install, setup and cache checks do not generate manuals. Cache misses are visible; there is no silent spec-only fallback. After manually editing generator/settings files, restart DSH so readiness is revalidated, then prepare if needed.
+Select **Generate missing manuals (uses API)** or send `/toollery prepare` for tools. In a manual-based skill target, Toollery checks the current scoped native catalog and local cache before the first prompt is sent. If manuals are missing, the composer asks once for explicit approval; clicking **Generate missing skill manuals** sends the loaded skill content to the configured generation provider and may incur charges. The draft stays in the composer while the composer is blocked until manuals are ready. `/toollery prepare-skills` remains available for deliberate pre-generation. Worker concurrency defaults to 8, adjustable from 1 to 8 in `settings.json` before starting DSH. Install, setup and cache checks do not generate manuals. Cache misses are visible; there is no silent spec-only fallback. After manually editing generator/settings files, restart DSH so readiness is revalidated, then prepare if needed.
 
-After successful preparation the plugin defaults to ON / `spec_manual` / top-k / k=3. If you explicitly switched OFF while preparation was running, it stays OFF. Use `/toollery on` when ready. Setup/preparation progress appears in the Web controls; terminal users can poll `/toollery status`.
+After successful preparation the plugin defaults to ON / `spec_manual` / top-k with tool k=3 and skill k=3. If you explicitly switched OFF while preparation was running, it stays OFF. Use `/toollery on` when ready. Setup/preparation progress appears in the Web controls; terminal users can poll `/toollery status`.
 
 **Hide or restore the panel:** click the header chevron to hide the controls and turn cards. The small funnel button beside the composer keeps showing ON/OFF and flags errors or required setup/approval with `!`. Click it to expand in place. Folding makes no configuration requests and leaves retrieval, the current selection, results and unsaved inputs unchanged. The display preference is shared across conversations in the same browser origin and survives reloads when browser storage is available. Unsaved form inputs survive folding, not page reloads. The separate plugin setup page remains available.
 
 ### Changes during a conversation
 
-At the first model assembly of a new user turn, Toollery compares the agent's current visible registry with its committed snapshot. Removals and fully cached changes need no generation. For `manual`/`spec_manual`, up to `refresh_max_misses` uncached tools can be generated automatically (default 15); this counts cache misses, not changed tool names. The policy uses the saved manual provider and can send newly visible schemas to it. Set the limit to 0 to require explicit approval for every new manual. `spec` refreshes need no manuals. OFF performs no generation and preserves normal host tool visibility.
+At the first model assembly of a new user turn, Toollery compares the agent's current visible registry with its committed snapshot. Removals and fully cached changes need no generation. For tool `manual`/`spec_manual`, up to `refresh_max_misses` uncached tools can be generated automatically (default 15); this counts cache misses, not changed tool names. Skill manuals use a separate explicit approval flow before prompt submission; the cache check is local-only, and generation never starts during skill search without a click or explicit `/toollery prepare-skills` command. The policy uses the saved manual provider and can send newly visible tool schemas or bounded skill-body evidence to it. Set the limit to 0 to require explicit approval for every new tool manual. `spec` refreshes need no manuals. OFF performs no generation and preserves normal host tool visibility.
 
-Above the limit, the turn reports `approval_required`. Approve in the Toollery panel or run `/toollery prepare`, wait until ready, then **resubmit the original message**. Approval applies to the pending new snapshot. A failed refresh retains that target for retry. There is no automatic message replay or automatic switch to OFF.
+For tool manuals, a refresh above the configured miss limit reports `approval_required`. Approve in the Toollery panel or run `/toollery prepare`, wait until ready, then **resubmit the original message**. This approval applies to the pending tool snapshot. Skill manuals use the separate composer preflight described above: missing cache entries are shown before submission, and the draft remains blocked until the user explicitly starts generation and it completes. A failed refresh retains its target for retry. There is no automatic message replay or automatic switch to OFF.
 
 The panel shows completed/total tools, elapsed time and approximate remaining time. ETA uses actual uncached-tool completions; cache hits do not inflate its rate. Before the first completion it shows **estimating remaining time**. Small batches, retries, provider load and the final index build make ETA approximate.
 
@@ -136,7 +138,7 @@ flowchart LR
   Host[DSH per-turn tool restrictions] --> Select
   Select --> Schemas[Selected original schemas]
   Schemas --> Model[Existing DSH chat model]
-  Prompt --> Off[OFF: normal host tool set]
+  Prompt --> Off[OFF: host-eligible tools and native skills]
   Off --> Model
 ```
 
@@ -155,7 +157,7 @@ DSH's default addition-only tool-history projection can otherwise retain old dec
 - Settings and selection are frozen per user turn. Additions/schema changes reconcile on the next turn; tools unloaded during a turn are not revived by its frozen selection. Executable behavior changes with identical specs cannot be detected.
 - Cache identity handles new/changed evidence; matching entries are reused. Old entries are not automatically deleted. Toollery observes sources already registered by DSH; it does not reload a source that the host has not refreshed.
 - Provider-owned discovery is an optional ranking API, not an autonomous discovery loop. External batches use an ephemeral index and shared cache without changing the active selection. Same-turn model-facing additions would need a separate explicit selection-epoch transition and are not implemented.
-- On hosts publishing a native skill catalog, Toollery ranks its name/description summaries using metadata-only BM25. It never accesses the skill registry or bodies. The native `skill` declaration remains available within host eligibility, so DSH loads bodies through its own provider. Targets are `tools`, `skills`, and `both`: `skills` keeps all host-eligible tools without tool retrieval or manual preparation; `both` runs both searches independently. Turn records expose selected skills and retrieval time. Catalog selection is frozen per turn and reused across model steps; settings apply next turn. This routes catalog presentation, not skill execution permissions. Hosts without a native catalog retain normal behavior. Skill manuals, dependency expansion and recovery search remain outside this MVP.
+- On hosts publishing a native skill catalog, Toollery ranks metadata with `spec`, generated body-derived intent queries with `manual`, or both with `spec_manual`. Manual preparation uses DSH's scoped native loader and a separate `skill-cache`; the body is never projected into model history. Before submission, the composer checks that cache locally and requires explicit approval to generate missing entries, preserving the draft until ready. The native `skill` declaration remains available within host eligibility, so DSH loads and executes bodies through its own provider. Targets are `tools`, `skills`, and `both`: `skills` keeps all host-eligible tools without tool retrieval or tool-manual preparation; `both` runs both searches independently. Tool and skill top-k values can differ. Turn records expose selected skills and retrieval time. Catalog selection is frozen per turn and reused across model steps; settings apply next turn. This routes catalog presentation, not skill execution permissions. Hosts without a native catalog retain normal behavior. Skill dependency expansion and recovery search remain outside this implementation.
 - Latest-text retrieval can omit dependency/follow-up tools. Increase k or turn OFF. These limitations are unchanged by packaging; [experiment evidence](experiments/README.md) is from the earlier standalone integration.
 - Disable/remove the bundle through DSH's Plugins page or `dsh plugin --profile web remove @jkl-agents/dsh-toollery`. If DSH reports restart-required, restart to finish unloading. The worker, guards, prompt sections and UI routes are plugin-owned and cleaned up on unload. Cache/configuration persist.
 - If the worker fails while ON, the turn reports an error. The status UI still allows OFF, which bypasses retrieval without needing the worker. Keys/bridge token are not exposed to the browser. Local runs may contain prompts, tool specifications and results metadata.

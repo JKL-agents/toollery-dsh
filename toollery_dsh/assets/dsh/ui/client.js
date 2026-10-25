@@ -4,6 +4,7 @@ window.__ModuleLoader__.load({
     const React = require('react')
     const h = React.createElement
     const stores = new Map()
+    let conversationService
     // Browser-only presentation preference; never change retrieval settings.
     const collapsedKey = 'toollery.panel.collapsed'
     const displayListeners = new Set()
@@ -32,21 +33,32 @@ window.__ModuleLoader__.load({
     }
     function storeFor(id) {
       if (!stores.has(id)) {
-        const store = { value: { data: null, busy: false, error: '' }, listeners: new Set(), timer: null, pending: false, sequence: 0 }
+        const store = { value: { data: null, busy: false, error: '', pendingSkillGate: true }, listeners: new Set(), timer: null, pending: false, sequence: 0 }
         store.publish = value => { store.value = { ...store.value, ...value }; store.listeners.forEach(fn => fn()) }
         store.refresh = async () => {
           if (store.pending || store.value.busy) return
           store.pending = true
           const sequence = store.sequence
-          try { const data = await request(id); if (sequence === store.sequence) store.publish({ data, error: '' }) }
-          catch (error) { if (sequence === store.sequence) store.publish({ error: error.message }) }
+          try { const data = await request(id); if (sequence === store.sequence) store.publish({ data, error: '', pendingSkillGate: false }) }
+          catch (error) { if (sequence === store.sequence) store.publish({ error: error.message, pendingSkillGate: false }) }
           finally { store.pending = false }
         }
         store.configure = async (options, action, details) => {
           if (store.value.busy) return
+          const current = store.value.data
+          const target = options?.retrieval_target ?? current?.retrieval_target
+          const representation = options?.skill_representation ?? current?.skill_representation
+          const enabled = options?.enabled ?? current?.enabled
+          const pendingSkillGate = action === 'prepare_skills' || action === 'check_skills'
+            || (!!enabled && ['skills', 'both'].includes(target) && representation !== 'spec')
+          if (pendingSkillGate) conversationService?.blocks?.set(id, {
+            reason: 'Toollery is checking or preparing skill manuals. Please wait before starting the conversation.',
+          })
+          else if (options?.enabled === false || options?.skill_representation === 'spec'
+              || options?.retrieval_target === 'tools') conversationService?.blocks?.set(id, undefined)
           store.sequence++
-          store.publish({ busy: true, error: '' })
-          try { store.publish({ data: await request(id, options, action, details) }); return true }
+          store.publish({ busy: true, error: '', pendingSkillGate })
+          try { store.publish({ data: await request(id, options, action, details), pendingSkillGate: false }); return true }
           catch (error) { store.publish({ error: error.message }); return false }
           finally { store.publish({ busy: false }) }
         }
@@ -83,8 +95,48 @@ window.__ModuleLoader__.load({
       const count = total ? `${done}/${total}` : `${done}`
       return `Manual preparation: ${count} · elapsed ${elapsed || '—'} · ${eta ? `about ${eta} remaining` : 'estimating remaining time…'}`
     }
+    function skillProgressText(data) {
+      if (!data || data.skill_phase !== 'preparing') return null
+      const done = Number.isFinite(data.skill_completed) ? data.skill_completed : 0
+      const total = Number.isFinite(data.skill_total) ? data.skill_total : (data.skill_manual_count || 0)
+      const elapsed = formatDuration(data.skill_elapsed_seconds)
+      const eta = formatDuration(data.skill_eta_seconds)
+      return `Skill manual preparation: ${done}/${total} · elapsed ${elapsed || '—'} · ${eta ? `about ${eta} remaining` : 'estimating remaining time…'}`
+    }
+
+    function SkillInitialization({ data, busy, configure }) {
+      const target = data?.retrieval_target
+      const count = Number(data?.skill_manual_count || 0)
+      const phase = data?.skill_phase
+      const skillRunning = phase === 'preparing'
+      const prepared = data?.skill_manuals_prepared === true
+      const inScope = ['skills', 'both'].includes(target) && data?.skill_representation !== 'spec'
+      if (!inScope) return null
+      if (prepared) return h('div', { role: 'status', style: { marginTop: 10 } },
+        `Skill manuals are ready (${data.skill_manuals_valid || 0}/${count}). You can start the conversation.`)
+      if (phase === 'preflight_required') return h('div', { role: 'status', style: { marginTop: 10 } },
+        'Checking the native skill-manual cache locally…')
+      if (phase === 'checking') return h('div', { role: 'status', style: { marginTop: 10 } },
+        'Checking the native skill-manual cache locally…')
+      if (phase === 'preparing') return h('div', { role: 'status', style: { marginTop: 10 } },
+        `Preparing ${data.skill_missing || 'missing'} skill manuals. The composer will unlock when preparation finishes.`)
+      if (count < 1 && phase !== 'preflight_failed') return null
+      const missing = Number(data?.skill_missing ?? Math.max(0, count - (data?.skill_manuals_valid || 0)))
+      const needs = ['needs_preparation', 'approval_required', 'preflight_failed'].includes(phase)
+        || (count > 0 && !prepared)
+      if (!needs) return null
+      return h('div', { style: { marginTop: 10 } },
+        h('strong', null, 'Skill manuals'),
+        h('p', null, `${data.skill_manuals_valid || 0} cached / ${count} native skills; ${missing} need generation. Each manual creates three intent queries. Skill contents are sent to the configured generation service only after you click below; API charges may apply. They are not added to chat context.`),
+        data.skill_error && h('p', { role: 'alert', style: { color: '#c35d40' } }, data.skill_error),
+        phase === 'preflight_failed' && h('button', { style: input, disabled: busy || skillRunning,
+          onClick: () => configure(undefined, 'check_skills') }, 'Retry local cache check'),
+        h('button', { style: input, disabled: busy || skillRunning || missing < 1,
+          onClick: () => configure(undefined, 'prepare_skills') }, `Generate ${missing} missing skill manuals — may incur API charges`))
+    }
     function Initialization({ data, busy, configure }) {
       const generator = data?.generator
+      const hasToolTarget = data?.retrieval_target !== 'skills'
       const [allowDownload, setAllowDownload] = React.useState(false)
       const [model, setModel] = React.useState('deepseek-flash')
       const [url, setUrl] = React.useState('https://api.deepseek.com')
@@ -97,6 +149,7 @@ window.__ModuleLoader__.load({
       React.useEffect(() => { setConsent(false) }, [data?.phase, generator?.model, generator?.api_url])
       if (!data?.managed || data.phase === 'unsupported') return null
       const running = busy || ['preparing', 'refreshing', 'setting_up', 'starting'].includes(data.phase)
+        || data.skill_phase === 'preparing'
       const unsaved = !!generator?.editable && (model !== generator.model || url !== generator.api_url || !!key)
       return h('div', { style: { marginTop: 10 } },
         data.phase === 'needs_setup' && h('div', null,
@@ -125,7 +178,7 @@ window.__ModuleLoader__.load({
           h('button', { type: 'submit', style: input, disabled: running }, 'Save manual settings'),
           saved && h('span', { role: 'status' }, 'Settings saved. The cache is being checked; no API calls were made.'))),
         data.session_required && h('p', null, '3. Start a new conversation with native tool presentation. Its Toollery panel will show the tool pool and let you confirm manual generation.'),
-        (['needs_preparation', 'approval_required', 'refresh_failed'].includes(data.phase)
+        (hasToolTarget && (['needs_preparation', 'approval_required', 'refresh_failed'].includes(data.phase)
           || (data.phase === 'ready' && data.manuals_prepared === false)) && h('div', { style: { marginTop: 10 } },
           h('strong', null, '3. Prepare manuals'),
           h('p', null, ['needs_preparation', 'ready'].includes(data.phase)
@@ -135,7 +188,7 @@ window.__ModuleLoader__.load({
           h('label', { style: { display: 'block', marginBottom: 8 } }, h('input', { type: 'checkbox', checked: consent, disabled: busy,
             onChange: e => setConsent(e.target.checked) }), ' I allow API calls and possible charges to generate missing or changed manuals.'),
           h('button', { style: input, disabled: busy || !consent || unsaved || (generator?.editable && !generator.configured),
-            onClick: () => { setConsent(false); configure(undefined, 'prepare') } }, 'Generate missing manuals (uses API)')),
+            onClick: () => { setConsent(false); configure(undefined, 'prepare') } }, 'Generate missing manuals (uses API)'))),
         data.phase === 'ready' && !data.session_required && h('p', { role: 'status' },
           data.manuals_prepared === false ? 'Spec retrieval is ready. Prepare manuals before switching to a manual-based mode.'
             : `Ready: all ${data.tool_count} manuals are cached. ${data.enabled ? 'Toollery is ON for the next turn.' : 'Switch ON when you want to try retrieval.'}`))
@@ -153,18 +206,73 @@ window.__ModuleLoader__.load({
         error && h('p', { role: 'alert', style: { color: '#c35d40' } }, error))
     }
     function Controls({ sessionId }) {
-      const { data, busy, error, configure } = useToollery(sessionId)
+      const { data, busy, error, pendingSkillGate, configure } = useToollery(sessionId)
       const collapsed = usePanelCollapsed()
-      const [draftK, setDraftK] = React.useState('3')
-      React.useEffect(() => { if (data) setDraftK(String(data.k)) }, [data?.k])
+      const manualSkillMode = !!data?.enabled && ['skills', 'both'].includes(data?.retrieval_target)
+        && data?.skill_representation !== 'spec'
+      const blockReason = pendingSkillGate ? 'Toollery is checking or preparing skill manuals. Please wait before starting the conversation.'
+        : manualSkillMode && data?.skill_manuals_prepared !== true
+          ? data?.skill_phase === 'preparing' ? 'Skill manuals are being prepared. Please wait before starting the conversation.'
+            : 'Approve skill-manual generation in the Toollery panel before starting the conversation.'
+          : undefined
+      React.useEffect(() => {
+        if (!sessionId) return
+        const blocks = conversationService?.blocks
+        if (!blocks?.set) return
+        blocks.set(sessionId, blockReason ? { reason: blockReason } : undefined)
+        return () => blocks.set(sessionId, undefined)
+      }, [sessionId, blockReason])
+      const [draftToolK, setDraftToolK] = React.useState(String(data?.tool_k ?? data?.k ?? 3))
+      const [draftSkillK, setDraftSkillK] = React.useState(String(data?.skill_k ?? data?.k ?? 3))
+      React.useEffect(() => {
+        if (data) {
+          setDraftToolK(String(data.tool_k ?? data.k ?? 3))
+          setDraftSkillK(String(data.skill_k ?? data.k ?? 3))
+        }
+      }, [data?.tool_k, data?.skill_k, data?.k])
       const status = data ? data.enabled ? 'ON' : 'OFF' : 'Loading'
       const current = data?.last_selection
-      const currentK = current?.budget === 'all' ? 'all' : (Number.isInteger(current?.k) ? current.k : null)
-      const nextK = data?.budget === 'all' ? 'all' : data?.k
-      const settingText = currentK === null
-        ? `Next turn: k=${nextK}`
-        : `Current turn: k=${currentK} · Next turn: k=${nextK}`
-      const notice = error || data?.error || (['approval_required', 'refresh_failed', 'needs_setup', 'needs_preparation', 'unsupported'].includes(data?.phase) ? data.phase : '')
+      const target = data?.retrieval_target || 'tools'
+      const currentTarget = current?.retrieval_target || target
+      const currentToolK = current?.budget === 'all' ? 'all' : (current?.tool_k ?? current?.k ?? null)
+      const currentSkillK = current?.budget === 'all' ? 'all' : (current?.skill_k ?? current?.k ?? null)
+      const nextToolK = data?.budget === 'all' ? 'all' : (data?.tool_k ?? data?.k)
+      const nextSkillK = data?.budget === 'all' ? 'all' : (data?.skill_k ?? data?.k)
+      const bothTargets = target === 'both'
+      const hasCurrent = !!current && (currentTarget === 'both'
+        ? currentToolK !== null && currentSkillK !== null
+        : currentTarget === 'skills' ? currentSkillK !== null : currentToolK !== null)
+      const settingFor = (which, toolK, skillK) => which === 'both'
+        ? `tool k=${toolK} · skill k=${skillK}` : `k=${which === 'skills' ? skillK : toolK}`
+      const settingText = !hasCurrent
+        ? `Next turn: ${settingFor(target, nextToolK, nextSkillK)}`
+        : `Current turn (${currentTarget}): ${settingFor(currentTarget, currentToolK, currentSkillK)} · Next turn: ${settingFor(target, nextToolK, nextSkillK)}`
+      const validK = kind => {
+        const isSkill = kind === 'skill'
+        const value = Number(isSkill ? draftSkillK : draftToolK)
+        return Number.isInteger(value) && value >= 1
+          && (isSkill || data?.retrieval_target === 'skills' || value <= data?.tool_count)
+      }
+      const changedK = kind => Number(kind === 'skill' ? draftSkillK : draftToolK)
+        !== (kind === 'skill' ? data?.skill_k ?? data?.k : data?.tool_k ?? data?.k)
+      const kControl = kind => {
+        const isSkill = kind === 'skill'
+        const label = bothTargets ? `${isSkill ? 'Skill' : 'Tool'} k` : 'k'
+        const draft = isSkill ? draftSkillK : draftToolK
+        const setDraft = isSkill ? setDraftSkillK : setDraftToolK
+        const key = isSkill ? 'skill_k' : 'tool_k'
+        const field = h('label', { key: `${kind}-k-label` }, `${label} `, h('input', { 'aria-label': `Toollery ${bothTargets ? `${kind} ` : isSkill ? 'skill ' : ''}k`, type: 'number', min: 1,
+            max: !isSkill && data?.retrieval_target !== 'skills' ? data?.tool_count || undefined : undefined,
+            value: draft, disabled: busy || !data?.enabled || data?.budget !== 'top_k',
+            style: { ...input, width: 52 }, onChange: e => setDraft(e.target.value) }))
+        if (bothTargets) return [field]
+        return [field, h('button', { key: `${kind}-k-apply`, style: input, disabled: busy || !data?.enabled || data?.budget !== 'top_k'
+          || !validK(kind) || !changedK(kind),
+          onClick: () => configure({ [key]: Number(draft) }) }, 'Apply k')]
+      }
+      const notice = error || data?.error || data?.skill_error
+        || (['approval_required', 'refresh_failed', 'needs_setup', 'needs_preparation', 'unsupported'].includes(data?.phase) ? data.phase : '')
+        || (['approval_required', 'needs_preparation'].includes(data?.skill_phase) ? `skill ${data.skill_phase}` : '')
       return h('section', { 'aria-label': 'Toollery controls', style: collapsed
         ? { marginTop: 4, display: 'flex', justifyContent: 'flex-end' } : { ...panel, marginTop: 8 } },
         h('button', { type: 'button', hidden: !collapsed, 'aria-label': 'Expand Toollery panel', 'aria-expanded': false,
@@ -182,11 +290,14 @@ window.__ModuleLoader__.load({
           h('button', { role: 'switch', 'aria-label': 'Enable Toollery', 'aria-checked': !!data?.enabled,
             disabled: busy || !data || (!data.enabled && data.retrieval_target !== 'skills' && data.phase && !data.retrieval_ready), onClick: () => configure({ enabled: !data.enabled }),
             style: { ...input, fontWeight: 700, color: data?.enabled ? '#19865b' : 'inherit' } }, data ? data.enabled ? 'ON' : 'OFF' : 'Loading'),
-          h('label', null, data?.retrieval_target === 'both' ? 'Tool representation ' : 'Representation ', h('select', { 'aria-label': 'Toollery representation', style: input,
-            value: data?.representation || 'spec_manual', disabled: busy || !data || !data.enabled || data.retrieval_target === 'skills',
+          ['tools', 'both'].includes(data?.retrieval_target) && h('label', null, 'Tool rep ', h('select', { 'aria-label': 'Toollery tool rep', style: input,
+            value: data?.representation || 'spec_manual', disabled: busy || !data || !data.enabled,
             onChange: e => configure({ representation: e.target.value }) },
           ...['spec', 'manual', 'spec_manual'].map(value => h('option', { key: value, value }, value)))),
-          ['skills', 'both'].includes(data?.retrieval_target) && h('span', { style: { opacity: .75 } }, 'Skill retrieval: metadata BM25'),
+          ['skills', 'both'].includes(data?.retrieval_target) && data?.skill_representation && h('label', null, 'Skill rep ', h('select', { 'aria-label': 'Toollery skill rep', style: input,
+            value: data?.skill_representation || 'spec_manual', disabled: busy || !data || !data.enabled,
+            onChange: e => configure({ skill_representation: e.target.value }) },
+          ...['spec', 'manual', 'spec_manual'].map(value => h('option', { key: value, value }, value)))),
           h('label', null, 'Budget ', h('select', { 'aria-label': 'Toollery budget', style: input,
             value: data?.budget || 'top_k', disabled: busy || !data || !data.enabled,
             onChange: e => configure({ budget: e.target.value }) },
@@ -196,13 +307,13 @@ window.__ModuleLoader__.load({
             onChange: e => configure({ retrieval_target: e.target.value }) },
           h('option', { value: 'tools' }, 'tools'), h('option', { value: 'skills' }, 'skills'),
           h('option', { value: 'both' }, 'both'))),
-          h('label', null, 'k ', h('input', { 'aria-label': 'Toollery k', type: 'number', min: 1, max: data?.retrieval_target === 'tools' ? data.tool_count || undefined : undefined,
-            value: draftK, disabled: busy || !data?.enabled || data?.budget !== 'top_k',
-            style: { ...input, width: 52 }, onChange: e => setDraftK(e.target.value) })),
-          h('button', { style: input, disabled: busy || !data?.enabled || data?.budget !== 'top_k'
-            || !Number.isInteger(Number(draftK)) || Number(draftK) < 1 || (data?.retrieval_target === 'tools' && Number(draftK) > data.tool_count) || Number(draftK) === data?.k,
-            onClick: () => configure({ k: Number(draftK) }) }, 'Apply k'),
-          h('span', { style: { opacity: .65 } }, data ? `Indexed tool pool: ${data.tool_count}` : 'Waiting for session'),
+          ...(data?.retrieval_target === 'skills' ? kControl('skill')
+            : data?.retrieval_target === 'both' ? [...kControl('tool'), ...kControl('skill'),
+              h('button', { key: 'both-k-apply', style: input,
+                disabled: busy || !data?.enabled || data?.budget !== 'top_k'
+                  || !validK('tool') || !validK('skill') || (!changedK('tool') && !changedK('skill')),
+                onClick: () => configure({ tool_k: Number(draftToolK), skill_k: Number(draftSkillK) }) }, 'Update k')]
+              : kControl('tool')),
           h('button', { type: 'button', 'aria-label': 'Collapse Toollery panel', 'aria-expanded': true,
             title: 'Hide controls and turn cards. Retrieval keeps its current setting.', onClick: togglePanel,
             style: { ...input, marginLeft: 'auto', display: 'inline-flex', padding: 5, cursor: 'pointer' } },
@@ -210,16 +321,21 @@ window.__ModuleLoader__.load({
               strokeWidth: 2, 'aria-hidden': true }, h('path', { d: 'm6 15 6-6 6 6' })))),
         h('div', { role: 'status', style: { marginTop: 6, opacity: .75 } }, !data ? 'Loading session settings...' : busy ? 'Applying settings...' : data.enabled
           ? `Changes apply to the next turn. ${settingText}. Target: ${data.retrieval_target || 'tools'}. ${data.retrieval_target === 'skills' ? 'Skill retrieval keeps the full host-eligible tool pool.' : 'The current selection stays fixed.'}`
-          : 'OFF: the next turn uses the tools allowed by DSH without retrieval.'),
+          : "OFF: the next turn bypasses Toollery retrieval. DSH's host-eligible tools and native skill catalog remain available; host restrictions still apply."),
         data?.phase && h('div', { style: { marginTop: 8 } },
-          h('div', null, `Status: ${data.phase} · Manuals ${data.manuals_valid}/${data.tool_count}`),
+          h('div', null, `Status: ${data.phase} · Tool manuals ${data.manuals_valid}/${data.tool_count}${['skills', 'both'].includes(data.retrieval_target) ? ` · Skill manuals ${data.skill_manuals_valid || 0}/${data.skill_manual_count || 0}` : ''}`),
           progressText(data) && h('div', { role: 'status', style: { opacity: .8, marginTop: 4 } }, progressText(data)),
+          skillProgressText(data) && h('div', { role: 'status', style: { opacity: .8, marginTop: 4 } }, skillProgressText(data)),
+          data.skill_phase === 'preparing' && h('progress', { 'aria-label': 'Skill manual preparation progress',
+            max: data.skill_total || 1, ...(data.skill_total ? { value: data.skill_completed || 0 } : {}),
+            style: { width: '100%', marginTop: 6 } }),
           ['preparing', 'refreshing', 'setting_up', 'starting'].includes(data.phase) && h('progress', {
             'aria-label': 'Toollery preparation progress', max: data.total || 1,
             ...(['preparing', 'refreshing'].includes(data.phase) && data.total ? { value: data.completed || 0 } : {}), style: { width: '100%', marginTop: 6 } }),
           data.error && h('p', { style: { margin: '6px 0', overflowWrap: 'anywhere' } }, data.error),
           data.configuration_directory && h('div', { style: { opacity: .75, overflowWrap: 'anywhere' } }, `Configuration: ${data.configuration_directory}`),
-          h(Initialization, { data, busy, configure })),
+          h(Initialization, { data, busy, configure }),
+          h(SkillInitialization, { data, busy, configure })),
         error && h('div', { role: 'alert', style: { color: '#c35d40', marginTop: 4 } }, error)))
     }
     function ToolList({ title, tools }) {
@@ -243,7 +359,7 @@ window.__ModuleLoader__.load({
         style: { ...panel, margin: '8px 0', display: collapsed ? 'none' : undefined } },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' } },
           h('strong', null, `Toollery · ${record.enabled ? 'ON' : 'OFF'}`),
-          h('span', { style: { opacity: .7 } }, record.enabled ? `${record.retrieval_target || 'tools'} · ${record.retrieval_target === 'skills' ? 'metadata BM25' : record.retrieval_target === 'both' ? 'tools: ' + record.representation + ' / skills: metadata BM25' : record.representation} · ${record.budget === 'all' ? 'all' : 'k=' + record.k} · ${(record.retrieval_target === 'skills' ? record.skill_retrieval_ms || 0 : record.retrieval_ms).toFixed(2)} ms` : 'Full pool; retrieval bypassed')),
+          h('span', { style: { opacity: .7 } }, record.enabled ? `${record.retrieval_target || 'tools'} · ${record.retrieval_target === 'skills' ? 'skills: ' + (record.skill_representation || 'spec') : record.retrieval_target === 'both' ? 'tools: ' + record.representation + ' / skills: ' + (record.skill_representation || 'spec') : record.representation} · ${record.budget === 'all' ? 'all' : record.retrieval_target === 'both' ? 'tool k=' + (record.tool_k ?? record.k) + ' / skill k=' + (record.skill_k ?? record.k) : 'k=' + (record.retrieval_target === 'skills' ? record.skill_k ?? record.k : record.tool_k ?? record.k)} · ${(record.retrieval_target === 'skills' ? record.skill_retrieval_ms || 0 : record.retrieval_ms).toFixed(2)} ms` : 'Full pool; retrieval bypassed')),
         h('p', { style: { margin: '8px 0 2px', fontSize: 13 } },
           `Tool pool ${record.full_pool_count}${record.eligible_pool_count === undefined ? '' : ' → Allowed ' + record.eligible_pool_count} → Selected ${record.selected_names.length} → Called ${calledNames.length} tools`,
           h('span', { style: { opacity: .65, fontSize: 12 } }, ` (${calls.length} calls${errors ? ", " + errors + " errors" : ""})`)),
@@ -255,8 +371,9 @@ window.__ModuleLoader__.load({
         h(ToolList, { title: `Full tool pool (${pool.length})`, tools: pool }))
     }
     return {
-      inject: ['slots'],
+      inject: ['slots', 'conversation'],
       apply(ctx) {
+        conversationService = ctx.conversation
         ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
           name: 'plugins.bundle.config', key: '@jkl-agents/dsh-toollery',
         }, PluginSetup))

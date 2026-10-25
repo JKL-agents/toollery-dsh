@@ -6,20 +6,21 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { existsSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
-import { ToolleryService } from '../../build/plugin/service.mjs'
-import * as filter from '../../build/plugin/shared/toollery.mjs'
-import { registerSampleSkills } from '../../build/plugin/sample-skill-provider.mjs'
+import { register } from 'node:module'
 
 const [store, report] = process.argv.slice(2)
 const sampleCount = JSON.parse(await readFile(new URL('../../build/plugin/sample-skills/manifest.json', import.meta.url), 'utf8')).length
 const entries = await readdir(store)
-async function load(name) {
+function entry(name) {
+  const direct = join(store, '@deepseek-ai', name, 'lib/index.js')
+  if (existsSync(direct)) return direct
   // pnpm truncates long package directory names on Windows.
   const entry = entries.find(item => item.startsWith(`@deepseek-ai+${name}`.slice(0, 24))
     && existsSync(join(store, item, 'node_modules/@deepseek-ai', name, 'lib/index.js')))
   assert.ok(entry, `Missing installed DSH package: ${name}`)
-  return import(pathToFileURL(join(store, entry, 'node_modules/@deepseek-ai', name, 'lib/index.js')))
+  return join(store, entry, 'node_modules/@deepseek-ai', name, 'lib/index.js')
 }
+async function load(name) { return import(pathToFileURL(entry(name))) }
 const { Context } = await load('cordis')
 const { agentEvents } = await load('dsh-agent')
 const { createUserMessage } = await load('dsh-llm')
@@ -30,7 +31,6 @@ const nativeSkill = await load('dsh-tool-skill')
 const { ToolRuntime } = await load('dsh-tools')
 const { SystemPrompt } = await load('dsh-system-prompt')
 const root = await mkdtemp(join(tmpdir(), 'toollery real skill host '))
-const service = new ToolleryService(root, { python: process.env.TOOLLERY_TEST_PYTHON || 'python' })
 const ctx = new Context()
 const disposers = []
 const checks = []
@@ -48,8 +48,17 @@ try {
   } })
   ctx.provide('agents', { roots: () => [agent] })
   ctx.provide('workingDirectory', { ensure: async () => root })
+  ctx.provide('profileContext', { dir: root })
+  ctx.provide('llm', {})
+  const llmUrl = pathToFileURL(entry('dsh-llm')).href
+  const resolver = `export async function resolve(specifier, context, nextResolve) { if (specifier === '@deepseek-ai/dsh-llm') return { url: ${JSON.stringify(llmUrl)}, shortCircuit: true }; return nextResolve(specifier, context) }`
+  register(`data:text/javascript,${encodeURIComponent(resolver)}`, import.meta.url)
+  const toolleryPlugin = await import('../../build/plugin/index.mjs')
+  await mount(toolleryPlugin, { autoSetup: false, dataDirectory: '.', python: process.env.TOOLLERY_TEST_PYTHON || 'python' })
+  const service = ctx.get('toollery')
+  assert.ok(toolleryPlugin.inject.includes('skills'))
+  assert.ok(!toolleryPlugin.inject.includes('workingDirectory'))
   await mount({ inject: ['skills', 'tools'], apply(inner) {
-    registerSampleSkills(inner)
     inner.skills.register({ name: 'user-only', description: 'Never in model catalog', content: 'USER BODY',
       source: 'runtime', invocation: { modelInvocable: false, userInvocable: true } })
     for (const name of ['alpha-tool', 'beta-tool']) inner.tools.register({ name, description: name,
@@ -58,15 +67,25 @@ try {
       execute: async () => name })
   } })
   await mount(nativeSkill)
+  const providerDeadline = Date.now() + 10000
+  while (!(await ctx.skills.list({})).some(skill => skill.name === 'sample-meeting-minutes')) {
+    assert.ok(Date.now() < providerDeadline, 'Bundled sample provider did not register through the plugin entry')
+    await new Promise(done => setTimeout(done, 25))
+  }
+  const bundledSkills = await ctx.skills.list({})
+  check('Plugin entry registers bundled skills through the injected native registry', () => {
+    assert.ok(bundledSkills.length >= 90)
+    assert.ok(bundledSkills.some(skill => skill.name === 'sample-meeting-minutes'))
+  })
   await service.setup()
   assert.equal(service.phase, 'ready', service.message)
+  await writeFile(join(root, 'manual-generator.json'), JSON.stringify({ provider: 'mock' }))
   // A resumed session may already contain the full native catalog. The
   // native consumer then suppresses it on the first Toollery-enabled step.
   const seeded = await agentEvents(ctx, agent).waterfall('agent/pre-step',
     { turn: 0, step: 1, messages: [], signal: new AbortController().signal },
     async () => ({ kind: 'enter', messages: [] }))
   for (const message of seeded.messages) agent.session.append('user/message', message, { surfaceOp: 'append' })
-  await mount(filter, { managed: true, service })
   await agentEvents(ctx, agent).serial('agent/created', { signal: new AbortController().signal })
   let turn = 0
   const signal = new AbortController().signal
@@ -86,12 +105,25 @@ try {
     if (commit) for (const message of decision.messages) agent.session.append('user/message', message, { surfaceOp: 'append' })
     return { assembly, decision, catalog: catalogs(decision).at(-1) }
   }
-  await service.configure(agent.id, { enabled: true, retrieval_target: 'skills', k: 1 })
+  await service.configure(agent.id, { enabled: true, retrieval_target: 'skills', skill_representation: 'manual', k: 1 })
+  const preflight = await service.preflightSkills(agent.id)
+  assert.equal(preflight.status, 'approval_required')
+  assert.ok(preflight.missing > 0)
+  checks.push('Native catalog cache is checked before chat submission without generation calls')
+  await service.prepareSkills(agent.id)
+  const prepareDeadline = Date.now() + 30000
+  while ((await service.status(agent.id)).skill_phase !== 'ready') {
+    const status = await service.status(agent.id)
+    assert.ok(Date.now() < prepareDeadline, `Skill manual preparation timed out: ${JSON.stringify({ skill_phase: status.skill_phase, skill_error: status.skill_error, skill_manual_count: status.skill_manual_count, skill_missing: status.skill_missing, phase: status.phase, error: status.error })}`)
+    await new Promise(done => setTimeout(done, 50))
+  }
   const first = await step('meeting minutes decisions action items')
-  check('Skills: real native catalog is ranked, with about 100 sample skills', () => {
+  check('Manual retrieval ranks the real native catalog after body-derived manuals are prepared', () => {
     assert.equal(first.catalog.source.entries.length, 1)
     assert.equal(first.catalog.source.entries[0].name, 'sample-meeting-minutes')
     assert.deepEqual(first.assembly.tools.map(tool => tool.name).sort(), ['alpha-tool', 'beta-tool', 'skill'])
+    assert.equal(service.sessions.get(agent.id).skill_representation, 'manual')
+    assert.equal(service.sessions.get(agent.id).skill_manuals_prepared, true)
   })
   const loaded = await ctx.tools.execute({ callId: 'load-selected-skill', name: 'skill', arguments: { name: 'sample-meeting-minutes' }, agent, signal })
   check('Selected skill loads full body through real native tool pipeline', () => {
@@ -132,12 +164,16 @@ try {
     assert.ok(Date.now() < deadline, 'Mock preparation timed out')
     await new Promise(done => setTimeout(done, 50))
   }
-  await service.configure(agent.id, { enabled: true, retrieval_target: 'both', representation: 'spec', k: 1 })
-  const both = await step('meeting minutes decisions action items alpha-tool')
+  await service.configure(agent.id, { enabled: true, retrieval_target: 'both', representation: 'spec', k: 1, skill_k: 2 })
+  const both = await step('Use sample-meeting-minutes and sample-agent-architecture; add alpha-tool.')
+  const bothStatus = await service.status(agent.id)
   check('Both ranks skills and tools while keeping native skill loader', () => {
-    assert.equal(both.catalog.source.entries.length, 1)
+    assert.equal(both.catalog.source.entries.length, 2)
     assert.ok(both.assembly.tools.some(x => x.name === 'skill'))
     assert.ok(both.assembly.tools.length <= 2)
+    const selection = bothStatus.last_selection
+    assert.equal(selection.tool_k, 1)
+    assert.equal(selection.skill_k, 2)
   })
   const restriction = agent.ctx.tools.restrict({ allow: ['alpha-tool'] })
   try {
@@ -152,7 +188,6 @@ try {
   if (report) await writeFile(report, JSON.stringify(result, null, 2))
   console.log(JSON.stringify(result, null, 2))
 } finally {
-  await service.dispose()
   for (const dispose of disposers.reverse()) await dispose()
   await rm(root, { recursive: true, force: true })
 }

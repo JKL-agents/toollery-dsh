@@ -94,6 +94,15 @@ class ManualCache:
             record = json.loads(path.read_text(encoding="utf-8"))
             if not isinstance(record, dict) or any(record.get(k) != v for k, v in identity.items()):
                 return None
+            if identity.get("manual_kind") == "skill":
+                provenance = {
+                    "kind": "skill",
+                    "skill_name": identity.get("skill_name"),
+                    "skill_body_hash": identity.get("skill_body_hash"),
+                    "skill_metadata_hash": identity.get("skill_metadata_hash"),
+                }
+                if record.get("provenance") != provenance:
+                    return None
             if record.get("manual_key") != key:
                 return None
             queries = validate_queries(record["manual"]["proxy_queries"], identity["proxy_query_count"])
@@ -118,7 +127,8 @@ class ManualCache:
         finally:
             path.unlink(missing_ok=True)
 
-    def write(self, identity: dict, evidence: Evidence, entries: list[dict[str, str]], usage: dict) -> dict:
+    def write(self, identity: dict, evidence: Evidence, entries: list[dict[str, str]], usage: dict,
+              provenance: dict | None = None) -> dict:
         key = digest(identity)
         entries = validate_entries(entries, identity["proxy_query_count"])
         manual = {"entries": entries, "proxy_queries": [entry["query"] for entry in entries]}
@@ -131,6 +141,8 @@ class ManualCache:
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "usage": usage,
         }
+        if provenance is not None:
+            record["provenance"] = provenance
         atomic_json(self.path(key), record)
         return record
 

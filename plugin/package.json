@@ -1,6 +1,6 @@
 {
   "name": "@jkl-agents/dsh-toollery",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Tool and native skill retrieval for an existing DeepSeek Harness profile",
   "type": "module",
   "license": "MIT",

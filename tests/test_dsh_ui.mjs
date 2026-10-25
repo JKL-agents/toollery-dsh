@@ -30,12 +30,15 @@ test('managed onboarding works before a session, preserves explicit setup consen
   const send = fixture({ peer: {} }, {
     status: async id => ({ session_required: !id, generator: { key_configured: true } }),
     setup: async options => { calls.push(['setup', options]) },
+    checkSkillManuals: async id => { calls.push(['check_skills', id]) },
     saveGenerator: async settings => { calls.push(['save', settings.model]) },
   })
   assert.equal((await send({})).body.session_required, true)
   assert.equal((await send({ action: 'setup', setup_options: { allow_download: true } })).code, 200)
   assert.deepEqual(calls, [['setup', { allow_download: true }]])
   assert.equal((await send({ action: 'prepare' })).code, 400)
+  assert.equal((await send({ action: 'check_skills', session_id: 's' })).code, 200)
+  assert.deepEqual(calls.at(-1), ['check_skills', 's'])
   assert.equal((await send({ action: 'setup', setup_options: { executable: 'arbitrary' } })).code, 400)
   assert.equal((await send({ action: 'save_generator', generator_settings: { model: 'fixture', api_key: 'test-secret' } })).code, 200)
   assert.equal(JSON.stringify((await send({})).body).includes('test-secret'), false)
@@ -53,10 +56,11 @@ test('UI route forwards only allowed operations and keeps bridge authorization h
     return new Response(JSON.stringify({ enabled: false, tool_count: 12 }))
   }
   try {
-    const res = await fixture()({ session_id: 's', options: { enabled: false } })
+    const res = await fixture()({ session_id: 's', options: { tool_k: 5, skill_k: 9 } })
     assert.equal(res.code, 200)
     assert.deepEqual(requests.map(row => row.url), ['http://127.0.0.1:1234/configure', 'http://127.0.0.1:1234/status'])
     assert.equal(requests[0].options.headers.Authorization, 'Bearer test-only-token')
+    assert.deepEqual(JSON.parse(requests[0].options.body).options, { tool_k: 5, skill_k: 9 })
     assert.equal(JSON.stringify(res.body).includes('test-only-token'), false)
   } finally {
     globalThis.fetch = original

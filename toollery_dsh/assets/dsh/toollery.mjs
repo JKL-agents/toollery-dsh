@@ -2,10 +2,10 @@
 // normalization, generation, versioned caches and retrieval stay in Python.
 import { createSourceBarrier } from './sources.mjs'
 import { randomUUID } from 'node:crypto'
-import { catalogMessage, projectSkillCatalog, skillCandidates, visibleSkillCatalog } from './skills.mjs'
+import { catalogDescription, catalogMessage, loadSkillCandidates, projectSkillCatalog, visibleSkillCatalog } from './skills.mjs'
 
 export const name = 'toollery'
-export const inject = ['tools', 'agents', 'systemPrompt']
+export const inject = ['tools', 'agents', 'systemPrompt', 'skills']
 
 const ordered = schemas => [...schemas].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
 
@@ -34,13 +34,17 @@ export function apply(ctx, config = {}) {
   const managed = config.managed ? (config.service || ctx.get('toollery')) : null
   const residentToolNames = new Set(['skill', ...(Array.isArray(config.residentToolNames) ? config.residentToolNames : [])])
   // Toollery ranks the native skill catalog published for this agent and
-  // workspace. It never loads skill bodies or reads an unscoped registry.
+  // workspace. Manual mode loads bodies only through DSH's scoped native
+  // loader; it never reads an unscoped registry or publishes bodies to history.
   const endpoint = process.env.TOOLLERY_BRIDGE_URL
   const token = process.env.TOOLLERY_BRIDGE_TOKEN
   if (!managed && (!endpoint || !token || !/^http:\/\/127\.0\.0\.1:\d+$/.test(endpoint))) {
     throw new Error('Toollery requires its local Python bridge')
   }
   const states = new Map()
+  if (managed && typeof managed.invalidateSkillPreflight === 'function') {
+    ctx.on('skills/change', () => managed.invalidateSkillPreflight())
+  }
   const discover = managed ? async () => ({ complete: true, source: 'host-agent-scope' })
     : createSourceBarrier(ctx, config.toolSources ?? [])
   async function post(path, payload, signal) {
@@ -74,8 +78,28 @@ export function apply(ctx, config = {}) {
     const state = { frozen: new Map(structuredClone(schemas).map(tool => [tool.name, tool])),
       snapshot, messages: [], turn: null, turnEpoch: 0, turnOptions: null,
       selection: null, selectionTask: null, skillSelection: null, skillSelectionEpoch: null, skillTask: null,
-      skillCatalog: null, disposers: [] }
+      skillCatalog: null, skillBodies: new Map(), disposers: [] }
     states.set(agent, state)
+    if (managed && typeof managed.registerSkillCatalogLoader === 'function') {
+      managed.registerSkillCatalogLoader(agent.id, async ({ signal } = {}) => {
+        const workingDirectory = ctx.get('workingDirectory')
+        const cwd = workingDirectory?.ensure ? await workingDirectory.ensure(agent, signal) : undefined
+        const snapshot = await ctx.skills.snapshot({ cwd, signal, scope: agent })
+        if (!snapshot.complete) throw new Error('The native skill catalog is still updating. Retry the cache check shortly.')
+        const entries = snapshot.skills.map(skill => ({
+          name: skill.name, description: catalogDescription(skill.description), invocation: skill.invocation,
+        }))
+        return loadSkillCandidates(entries, {
+          skills: ctx.skills, workingDirectory, agent, signal, cache: state.skillBodies,
+          loadBodies: true,
+        })
+      })
+      const initial = await managed.settings(agent.id)
+      if (initial.enabled && ['skills', 'both'].includes(initial.retrieval_target)
+          && initial.skill_representation !== 'spec') {
+        try { await managed.preflightSkills(agent.id) } catch { /* The composer presents a retryable cache-check state. */ }
+      }
+    }
 
     // Callable schemas describe NOW. Without an explicit temporal contract a
     // model can mistake a past, successful call for an invented tool once that
@@ -172,7 +196,10 @@ export function apply(ctx, config = {}) {
               const status = await managed.settings(agent.id)
               if (selectionEpoch !== state.turnEpoch) throw new Error('Toollery: selection was superseded by a new user turn')
               options = { enabled: status.enabled, representation: status.representation,
-                budget: status.budget, k: status.k, retrieval_target: status.retrieval_target || 'tools' }
+                skill_representation: status.skill_representation || status.representation,
+                budget: status.budget, k: status.k,
+                tool_k: status.tool_k ?? status.k, skill_k: status.skill_k ?? status.k,
+                retrieval_target: status.retrieval_target || 'tools' }
               state.turnOptions = options
               // OFF is a real bypass, including when the worker is unavailable.
               if (!options.enabled) {
@@ -258,18 +285,25 @@ export function apply(ctx, config = {}) {
         if (!catalog || !state.messages.length || !state.selection?.model_tool_names?.includes('skill')) return decision
         const current = state.skillTask
         if (state.skillSelectionEpoch !== epoch && (!current || current.epoch !== epoch)) {
-          const candidates = skillCandidates(catalog.source.entries)
           const prompt = state.messages.flatMap(message => message.content || [])
             .filter(block => block?.type === 'text').map(block => block.text).join('\n')
-          const options = state.turnOptions || await managed.settings(agent.id)
-          const promise = managed.rankSkills(agent.id, prompt, candidates, {
-            budget: options.budget, k: options.k, requestId: `skills-${state.turn}-${epoch}`,
-          }, event.signal).then(result => {
+          const promise = (async () => {
+            const options = state.turnOptions || await managed.settings(agent.id)
+            const candidates = await loadSkillCandidates(catalog.source.entries, {
+              skills: ctx.skills, workingDirectory: typeof ctx.get === 'function' ? ctx.get('workingDirectory') : undefined,
+              agent, signal: event.signal, cache: state.skillBodies,
+              loadBodies: (options.skill_representation || options.representation) !== 'spec',
+            })
+            const result = await managed.rankSkills(agent.id, prompt, candidates, {
+              representation: options.skill_representation || options.representation,
+              budget: options.budget, skill_k: options.skill_k ?? options.k,
+              requestId: `skills-${state.turn}-${epoch}`,
+            }, event.signal)
             if (epoch !== state.turnEpoch) throw new Error('Toollery: skill selection was superseded by a new user turn')
             state.skillSelection = result
             state.skillSelectionEpoch = epoch
             return result
-          })
+          })()
           state.skillTask = { epoch, promise }
           promise.finally(() => {
             if (state.skillTask?.promise === promise) state.skillTask = null

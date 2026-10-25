@@ -1,5 +1,13 @@
 # Verification summary
 
+## v0.3.1 release checks
+
+This patch release completes the native skill manual path and the target-aware UI refinements. It preserves DSH ownership of tool and skill registration, host restrictions, body loading and execution. It does not claim that every native DSH tool is permanently resident while Toollery is ON; ON still retrieves within the host-eligible set, while OFF and `skills` preserve the complete host-eligible tool pool.
+
+The complete release validation passed **83 Python tests** (80 passed, 3 optional ToolTalk skips), **29 Node CI/UI/service tests**, and **5 packaged-plugin tests** against the embedded worker and shipped assets. These include **22 focused Python tests** for skill-manual identities, cache preflight, generation progress/ETA, worker configuration and retry behavior, and **6 Node UI/route tests** for target-aware representation controls, combined `both` k updates, OFF wording and skill-generation gating. The real native DSH fixture passed **12 checks** with `paid_api_calls: 0`, including pre-submission cache preflight, authorized body-derived manual generation, manual retrieval, native skill-body loading, catalog lifecycle transitions, Both/OFF behavior and host restrictions.
+
+The 0.3.1 wheel, source archive and npm candidate are built from synchronized version metadata; `twine check` passed for the Python artifacts. The npm bundle embeds the matching worker wheel and contains the shortened UI labels, combined `Update k` action and updated OFF message. This file records local candidate checks; GitHub CI is pending the reviewed commit being pushed.
+
 ## v0.3.0 release checks
 
 This release adds native skill adaptation and related UI/worker behavior. The checks below cover the packaged worker, native DSH lifecycle and skill routing; they do not claim a retrieval-quality benchmark or universal compatibility with arbitrary DSH plugins.

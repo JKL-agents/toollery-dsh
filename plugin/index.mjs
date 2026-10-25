@@ -6,7 +6,7 @@ import { applyProjection } from './projection.mjs'
 import { registerSampleSkills } from './sample-skill-provider.mjs'
 
 export const name = 'toollery-plugin'
-export const inject = ['profileContext', 'tools', 'agents', 'systemPrompt', 'llm']
+export const inject = ['profileContext', 'tools', 'agents', 'systemPrompt', 'llm', 'skills']
 
 export function apply(ctx, config = {}) {
   const directory = config.dataDirectory ? resolve(ctx.profileContext.dir, config.dataDirectory)
@@ -23,18 +23,22 @@ export function apply(ctx, config = {}) {
   ctx.inject(['commands'], inner => {
     inner.commands.register({
       name: 'toollery', description: 'Toollery setup, preparation and next-turn retrieval settings',
-      input: { hint: 'setup | prepare | status | on | off | mode spec|manual|spec_manual | target tools|skills|both | budget all|top_k | k N' },
+      input: { hint: 'setup | prepare | status | on | off | mode spec|manual|spec_manual | skill-mode spec|manual|spec_manual | target tools|skills|both | budget all|top_k | tool-k N | skill-k N | k N' },
       async handler({ agent, rawInput }) {
         const [command = 'status', value, ...extra] = rawInput.trim().split(/\s+/).filter(Boolean)
         try {
           if (extra.length) throw new Error('Provide one value.')
           if (command === 'setup' && !value) { void service.setup(); return { kind: 'success', text: 'Worker setup started. Use /toollery status for progress; no model calls are made.' } }
           else if (command === 'prepare' && !value) await service.prepare(agent.id)
+          else if (command === 'prepare-skills' && !value) await service.prepareSkills(agent.id)
           else if (['on', 'off'].includes(command) && !value) await service.configure(agent.id, { enabled: command === 'on' })
-          else if (['mode', 'target', 'budget', 'k'].includes(command) && value) await service.configure(agent.id, { [{ mode: 'representation', target: 'retrieval_target', budget: 'budget', k: 'k' }[command]]: command === 'k' ? Number(value) : value })
-          else if (command !== 'status' || value) throw new Error('Use /toollery setup | prepare | status | on | off | mode VALUE | target tools|skills|both | budget VALUE | k N.')
+          else if (['mode', 'skill-mode', 'target', 'budget', 'k', 'tool-k', 'skill-k'].includes(command) && value) {
+            const key = { mode: 'representation', 'skill-mode': 'skill_representation', target: 'retrieval_target', budget: 'budget', k: 'k', 'tool-k': 'tool_k', 'skill-k': 'skill_k' }[command]
+            await service.configure(agent.id, { [key]: ['k', 'tool-k', 'skill-k'].includes(command) ? Number(value) : value })
+          }
+          else if (command !== 'status' || value) throw new Error('Use /toollery setup | prepare | prepare-skills | status | on | off | mode VALUE | skill-mode VALUE | target tools|skills|both | budget VALUE | tool-k N | skill-k N | k N.')
           const status = await service.status(agent.id)
-          return { kind: 'success', text: `Toollery ${status.enabled ? 'ON' : 'OFF'}; ${status.phase}; ${status.manuals_valid}/${status.tool_count} manuals; ${status.representation}, ${status.budget}, k=${status.k}, target=${status.retrieval_target || 'tools'}.\nConfiguration: ${directory}${status.error ? '\n' + status.error : ''}` }
+          return { kind: 'success', text: `Toollery ${status.enabled ? 'ON' : 'OFF'}; ${status.phase}; tools ${status.manuals_valid}/${status.tool_count} manuals; skills ${status.skill_manuals_valid || 0}/${status.skill_manual_count || 0}; ${status.representation}, skill ${status.skill_representation || 'spec_manual'}, ${status.budget}, tool k=${status.tool_k ?? status.k}, skill k=${status.skill_k ?? status.k}, target=${status.retrieval_target || 'tools'}.\nConfiguration: ${directory}${status.error || status.skill_error ? '\n' + (status.error || status.skill_error) : ''}` }
         } catch (error) { return { kind: 'error', text: error.message } }
       },
     })

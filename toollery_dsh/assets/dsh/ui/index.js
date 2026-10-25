@@ -17,14 +17,14 @@ export function apply(ctx, config = {}) {
         }
         const { session_id, options, action, setup_options, generator_settings } = JSON.parse(body)
         if ((session_id !== undefined && (typeof session_id !== 'string' || !session_id))
-            || (!managed && !session_id) || ((options !== undefined || action === 'prepare') && !session_id)) {
+            || (!managed && !session_id) || ((options !== undefined || ['prepare', 'prepare_skills', 'check_skills'].includes(action)) && !session_id)) {
           return send(400, { error: 'Session required' })
         }
         if (options !== undefined && (!options || Array.isArray(options)
-            || Object.keys(options).some(key => !['enabled', 'representation', 'budget', 'k', 'retrieval_target'].includes(key)))) {
+            || Object.keys(options).some(key => !['enabled', 'representation', 'skill_representation', 'budget', 'k', 'tool_k', 'skill_k', 'retrieval_target'].includes(key)))) {
           return send(400, { error: 'Invalid settings' })
         }
-        if (action !== undefined && (!managed || !['setup', 'prepare', 'save_generator'].includes(action) || options !== undefined)) {
+        if (action !== undefined && (!managed || !['setup', 'prepare', 'prepare_skills', 'check_skills', 'save_generator'].includes(action) || options !== undefined)) {
           return send(400, { error: 'Invalid action' })
         }
         if (setup_options !== undefined && (action !== 'setup' || !setup_options || Array.isArray(setup_options)
@@ -35,6 +35,8 @@ export function apply(ctx, config = {}) {
           if (action === 'setup') void managed.setup(setup_options)
           if (action === 'save_generator') await managed.saveGenerator(generator_settings)
           if (action === 'prepare') await managed.prepare(session_id)
+          if (action === 'prepare_skills') await managed.prepareSkills(session_id)
+          if (action === 'check_skills') await managed.checkSkillManuals(session_id)
           if (options !== undefined) await managed.configure(session_id, options)
           return send(200, await managed.status(session_id))
         }
