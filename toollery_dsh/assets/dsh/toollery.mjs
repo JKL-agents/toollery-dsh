@@ -5,7 +5,7 @@ import { randomUUID } from 'node:crypto'
 import { catalogDescription, catalogMessage, loadSkillCandidates, projectSkillCatalog, visibleSkillCatalog } from './skills.mjs'
 
 export const name = 'toollery'
-export const inject = ['tools', 'agents', 'systemPrompt', 'skills']
+export const inject = ['tools', 'agents', 'systemPrompt']
 
 const ordered = schemas => [...schemas].sort((a, b) => a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
 
@@ -84,13 +84,13 @@ export function apply(ctx, config = {}) {
       managed.registerSkillCatalogLoader(agent.id, async ({ signal } = {}) => {
         const workingDirectory = ctx.get('workingDirectory')
         const cwd = workingDirectory?.ensure ? await workingDirectory.ensure(agent, signal) : undefined
-        const snapshot = await ctx.skills.snapshot({ cwd, signal, scope: agent })
+        const snapshot = await ctx.get('skills').snapshot({ cwd, signal, scope: agent })
         if (!snapshot.complete) throw new Error('The native skill catalog is still updating. Retry the cache check shortly.')
         const entries = snapshot.skills.map(skill => ({
           name: skill.name, description: catalogDescription(skill.description), invocation: skill.invocation,
         }))
         return loadSkillCandidates(entries, {
-          skills: ctx.skills, workingDirectory, agent, signal, cache: state.skillBodies,
+          skills: ctx.get('skills'), workingDirectory, agent, signal, cache: state.skillBodies,
           loadBodies: true,
         })
       })
@@ -290,7 +290,7 @@ export function apply(ctx, config = {}) {
           const promise = (async () => {
             const options = state.turnOptions || await managed.settings(agent.id)
             const candidates = await loadSkillCandidates(catalog.source.entries, {
-              skills: ctx.skills, workingDirectory: typeof ctx.get === 'function' ? ctx.get('workingDirectory') : undefined,
+              skills: typeof ctx.get === 'function' ? ctx.get('skills') : undefined, workingDirectory: typeof ctx.get === 'function' ? ctx.get('workingDirectory') : undefined,
               agent, signal: event.signal, cache: state.skillBodies,
               loadBodies: (options.skill_representation || options.representation) !== 'spec',
             })

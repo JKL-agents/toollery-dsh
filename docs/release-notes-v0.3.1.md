@@ -18,6 +18,8 @@ v0.3.1 completes the first native skill-manual workflow and refines the target-a
 
 ## UI and boundaries
 
+- Preserve standalone SDK presets that do not provide a native skill service.
+
 - Use `Tool rep` and `Skill rep` labels in the target-aware panel; `skills` shows only Skill rep and `both` shows both.
 - Remove the redundant Indexed tool pool line.
 - Keep tool k and skill k independent; in `both`, one **Update k** action applies both displayed values together. `/toollery k N` remains the command-line compatibility form.

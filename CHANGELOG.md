@@ -2,6 +2,8 @@
 
 ## 0.3.1 - 2026-10-25
 
+- Preserve standalone SDK presets without a native skill service: the shared adapter resolves that service only when needed, instead of blocking plugin activation.
+
 - Add native skill manual generation and retrieval: DSH's scoped loader supplies skill bodies for bounded evidence, generated intent queries are cached separately from tool manuals, and `manual` / `spec_manual` search the generated skill manuals. DSH remains responsible for loading and executing selected skill bodies.
 - Check skill-manual cache readiness before sending a prompt. Missing entries require an explicit composer action; the draft is preserved and sending stays blocked until preparation finishes. Cache checks do not call the generator.
 - Keep tool and skill top-k values independent while simplifying the panel: use concise `Tool rep` / `Skill rep` labels, remove the redundant indexed-pool count, and apply both k values with one `Update k` action in `both` mode.

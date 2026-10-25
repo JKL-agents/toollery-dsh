@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { apply } from '../toollery_dsh/assets/dsh/toollery.mjs'
+import { apply, inject } from '../toollery_dsh/assets/dsh/toollery.mjs'
 import { ToolleryService } from '../plugin/service.mjs'
 
 const schema = name => ({ name, description: name, parameters: { type: 'object' } })
@@ -10,6 +10,10 @@ const deferred = () => {
   return { promise, resolve }
 }
 const tick = () => new Promise(done => setImmediate(done))
+
+test('shared adapter can activate in standalone presets without a native skill service', () => {
+  assert.deepEqual(inject, ['tools', 'agents', 'systemPrompt'])
+})
 
 async function fixture() {
   const handlers = {}, agentHandlers = {}, calls = { settings: 0, refresh: 0, select: [] }
