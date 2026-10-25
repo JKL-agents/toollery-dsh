@@ -14,3 +14,4 @@ prune runs
 prune benchmark
 prune upstream
 global-exclude __pycache__ *.py[cod] .env
+recursive-include plugin/sample-skills LICENSE
