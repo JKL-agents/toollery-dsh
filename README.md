@@ -45,16 +45,13 @@ This is a separate demo environment, not a plugin installation. See the [launche
 - **Skill adaptation:** set Target to `skills` to rank the current native skill catalog while keeping every host-eligible tool available. Choose `spec` for metadata-only routing, or `manual` / `spec_manual` to route with body-derived intent queries. Use `tools` for tool retrieval or `both` for both paths. Skill bodies are loaded through DSH's scoped native loader and remain owned by DSH for invocation and execution.
 - **Independent top-k:** `tools` shows `Tool rep` and tool k; `skills` shows `Skill rep` and skill k; `both` shows both reps and keeps separate k values with one **Update k** action.
 
-<details>
-<summary>Watch the demos: change k, then switch OFF</summary>
+## See Toollery in DSH
 
-Both recordings use the standalone 12-tool pool. The first changes k from 3 to 5 between prompts; the second switches OFF to restore all 12 tools for the next turn.
+The first demo shows installing and enabling Toollery from DSH Desktop. The second shows the chat controls for `tools`, `skills`, and `both`, including their representation and top-k settings.
 
-![Change k and retrieve tools for different prompts](DSH_Toollery_demo.gif)
+![Install and enable Toollery in DSH Desktop](toollery_0.3.1_demo1.gif)
 
-![Switch Toollery OFF and restore all 12 tools](DSH_Toollery_demo_2.gif)
-
-</details>
+![Switch Toollery between tools, skills, and both in the chat window](toollery_0.3.1_demo2.gif)
 
 ## Results and boundaries
 
